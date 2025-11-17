@@ -1,6 +1,13 @@
 # A Geographically Replicable Framework for Area of Habitat (AOH) Maps at National and Sub-National Scales
 
-**Authors:** Wenxin Yang, Amy E. Frazier, Lei Song, Patrick R. Roehrdanz, Nickolas McManus, Dan Willett, Elkin A. Noguera-Urbano, Susana Rodríguez Buriticá
+**Authors:** Wenxin Yang<sup>1</sup>, Amy E. Frazier<sup>1</sup>, Lei Song<sup>2</sup>, Patrick R. Roehrdanz<sup>3</sup>, Nickolas McManus<sup>3</sup>, Dan Willett<sup>1</sup>, Elkin A. Noguera-Urbano<sup>4</sup>, Susana Rodríguez Buriticá<sup>4</sup>
+
+<sup>1</sup>University of California, Santa Barbara, US
+<sup>2</sup>Rutgers University - New Brunswick, US
+<sup>3</sup>Conservation International, US
+<sup>4</sup>Instituto Humboldt, Colombia
+
+**Recommended Citation:** To be added.
 
 ## Overview
 
