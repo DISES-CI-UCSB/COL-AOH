@@ -23,7 +23,7 @@ if(!dir.exists(out_dir)) {
   dir.create(out_dir, recursive = TRUE)
 }
 
-# Initialize CSV with headers if it doesn't exist
+# initialize CSV with headers if it doesn't exist
 if (!file.exists(out_csv)) {
   df_headers <- data.frame(
     species = character(0),
@@ -40,14 +40,14 @@ if (!file.exists(out_csv)) {
   readr::write_csv(df_headers, out_csv)
 }
 
-# Function to check if species already exists in CSV
+# check if species already exists in CSV
 species_exists_in_csv <- function(species_name, csv_path) {
   if (!file.exists(csv_path)) return(FALSE)
   existing_df <- readr::read_csv(csv_path, show_col_types = FALSE)
   return(species_name %in% existing_df$species)
 }
 
-# Function to append result to CSV
+# append result to CSV
 append_to_csv <- function(result_df, csv_path) {
   if (file.exists(csv_path)) {
     existing_df <- readr::read_csv(csv_path, show_col_types = FALSE)
@@ -77,7 +77,7 @@ taxa_map <- c(
   anfibios = 'Amphibians'
 )
 
-# Return species range (sf) merged to a single geometry, or NULL if not found
+# return species range (sf) merged to a single geometry, or NULL if not found
 get_species_range <- function(species_name, taxa_label, range_data) {
   if (is.null(range_data)) return(NULL)
   
@@ -187,7 +187,7 @@ for(taxa_group in names(species_by_taxa)) {
     
     message('Processing: ', sp_name)
     
-    # Initialize result with NA values and empty error message
+    # initialize result with NA values and empty error message
     result_df <- data.frame(
       species = sp_name,
       taxa = NA_character_,

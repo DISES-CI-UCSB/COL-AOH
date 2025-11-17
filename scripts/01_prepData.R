@@ -128,31 +128,7 @@ lc <- lc %>% mutate(leyenda_num = sapply(strsplit(leyenda, ' '), `[`, 1),
                     nivel_3_num = sapply(strsplit(nivel_3, ' '), `[`, 1),
                     nivel_2_num = sapply(strsplit(nivel_2, ' '), `[`, 1))
 
-# ========== side task 1: get low confiabili polygons ========
-# first get area info for all level 2 classes
-#lc_nivel2 <- lc %>% select(nivel_2_num, Shape_Area)
-#lc_nivel2$geometry <- NULL
-#lc_nivel2_area <- lc_nivel2 %>% group_by(nivel_2_num) %>% summarise(sum_area = sum(Shape_Area))
-#rm(lc_nivel2)
 
-# a <- unique(lc$nivel_2_num)
-
-# learn about polygons with low confiability
-#lc_no <- lc %>% filter(confiabili == "NO")
-#lc_no1 <- lc_no %>% select(nivel_2_num, Shape_Area)
-#lc_no1$geometry <- NULL
-#lc_no1_area<- lc_no1 %>% group_by(nivel_2_num) %>% summarise(low_area = sum(Shape_Area))
-#rm(lc_no)
-
-#low_confi <- merge(lc_nivel2_area, lc_no1_area, all.x=TRUE)
-# fill na with 0
-#low_confi$low_area <- ifelse(is.na(low_confi$low_area), 0, low_confi$low_area)
-# get the percentage of low confiability polygons
-#low_confi$perc_low <- 100*low_confi$low_area / low_confi$sum_area
-
-#100*sum(low_confi$low_area)/sum(low_confi$sum_area)
-
-# ========== side task completed ======
 lc_1 <- lc %>% select(leyenda_num, nivel_1_num, nivel_3_num, nivel_2_num)
 # , geometry
 # extract land cover types for pt values
@@ -174,7 +150,7 @@ all_pts <- full_list %>%
 # export all_pts
 # st_write(all_pts, 'data/occ_pts/all_pts.shp')
   
-# ---------------- side task 2: compute distance to nearest boundary --------------
+# ---------------- side task: compute distance to nearest boundary --------------
 # dissolve lc_1 by nivel_1_num
 #lc_1_dissolve <- lc_1 %>% group_by(nivel_1_num) %>% summarise()
 lc_1_dissolve <- st_read('data/IDEAM_landcover_2018/level1.shp')

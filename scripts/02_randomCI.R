@@ -1,5 +1,4 @@
-# Parameterized version of 02_computeMatrix.R for single matrix generation
-# with random sampling and statistics
+# Compute translation matrix with random sampling
 # Author: Wenxin Yang
 # Date: July, 2025
 # THIS IS THE SCRIPT I ENDED UP USING FOR THE MANUSCRIPT

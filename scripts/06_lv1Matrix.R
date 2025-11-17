@@ -1,8 +1,6 @@
-# Parameterized version of 02_computeMatrix.R for single matrix generation
-# with random sampling and statistics
+# Script to compute translation matrix for level 1 land cover
 # Author: Wenxin Yang
 # Date: July, 2025
-# THIS IS THE SCRIPT I ENDED UP USING FOR THE MANUSCRIPT
 
 # ================== Function to run single matrix analysis with parameters =====================
 run_analysis <- function(

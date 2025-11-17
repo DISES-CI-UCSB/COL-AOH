@@ -362,7 +362,7 @@ for(t in all_taxa){
   
   #ranges <- getRanges(t)
   
-  # Progress file to track what's happening (since console output doesn't work)
+  # progress file to track what's happening
   progress_file <- paste0('data/tmp/progress_', t, '.txt')
   dir.create('data/tmp', showWarnings = FALSE, recursive = TRUE)
   
@@ -383,8 +383,7 @@ for(t in all_taxa){
           # Load ranges on this worker instead of exporting the large object
           worker_ranges <- getRanges(t)
           
-          # Load spatial objects for this worker (loaded once per worker in clusterEvalQ)
-          # Access them from the worker's global environment
+          # Load spatial objects for this worker
           col_bound <- vect('C:/Users/wenxinyang/Desktop/GitHub/predFHD/data/Colombia/boundary/Colombia_bound.shp')
           col_srtm <- rast('data/col_srtm.tif')
           
