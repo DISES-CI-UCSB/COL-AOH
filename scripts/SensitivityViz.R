@@ -8,7 +8,7 @@ setwd('Users/wenxinyang/Desktop/GitHub/colander')
 source('scripts/refineBiomodelos/funcs.R')
 source('scripts/refineBiomodelos/info.R')
 # ============== 1. sensitivity of tertiles =============
-dft_folder <- 'results/aoh_results_randomCI_final_8gen_2022'
+dft_folder <- 'results/aoh_results_randomCI_final_2022/'
 tertile_file <- list.files(dft_folder, pattern = "_tertiles.csv", full.names = TRUE)
 df_tertile <- read.csv(tertile_file)
 
@@ -130,7 +130,7 @@ create_count_heatmap <- function(count_matrix, dft_folder) {
                                  ifelse(color_category == "n_samples",
                                         as.character(count_value),
                                         as.character(count_value)))), 
-              size = 5, fontface = "bold", color = "black", family = "Times New Roman") +
+              size = 5, fontface = "bold", color = "black", family = "Arial") +
     scale_fill_manual(
       values = c("Not a pair (≤300)" = "#f7f7f7", "Low (300-600)" = "#00b3ff", "Medium (600-900)" = "#dbb300", "High (>900)" = "#659c6a",
                  "AUC" = "white", "n_samples" = "white"),
@@ -139,15 +139,15 @@ create_count_heatmap <- function(count_matrix, dft_folder) {
     scale_x_discrete(position = "bottom") +
     theme_minimal() +
     theme(
-      text = element_text(family = "Times New Roman"),
-      axis.text.x = element_text(size = 12, family = "Times New Roman", angle = 30, hjust = 1),
-      axis.text.y = element_text(size = 15, family = "Times New Roman"),
-      axis.title.x = element_text(size = 16, face = 'bold', family = "Times New Roman"),
-      axis.title.y = element_text(size = 16, face = 'bold', family = "Times New Roman"),
-      legend.title = element_text(size = 16, family = "Times New Roman"),
-      legend.text = element_text(size = 14, family = "Times New Roman"),
+      text = element_text(family = "Arial"),
+      axis.text.x = element_text(size = 12, family = "Arial", angle = 30, hjust = 1),
+      axis.text.y = element_text(size = 15, family = "Arial"),
+      axis.title.x = element_text(size = 16, face = 'bold', family = "Arial"),
+      axis.title.y = element_text(size = 16, face = 'bold', family = "Arial"),
+      legend.title = element_text(size = 16, family = "Arial"),
+      legend.text = element_text(size = 14, family = "Arial"),
       legend.position = "right",
-      plot.title = element_text(hjust = 0.5, size = 20, face = "bold", family = "Times New Roman"),
+      plot.title = element_text(hjust = 0.5, size = 20, face = "bold", family = "Arial"),
       panel.grid = element_blank(),
       panel.background = element_rect(fill = "white", color = NA)
     ) +
@@ -163,7 +163,7 @@ create_count_heatmap <- function(count_matrix, dft_folder) {
 
 
 
-dft_folder <- 'results/aoh_results_randomCI_final_2022'
+dft_folder <- 'results/aoh_results_randomCI_final_7gen_2022/'
 count_matrix <- read.csv(paste0(dft_folder, "/count_above_1_matrix.csv"))
 p1 <- count_heatmap <- create_count_heatmap(count_matrix, dft_folder)
 p1

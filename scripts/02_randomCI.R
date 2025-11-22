@@ -1,4 +1,5 @@
-# Compute translation matrix with random sampling
+# Parameterized version of 02_computeMatrix.R for single matrix generation
+# with random sampling and statistics
 # Author: Wenxin Yang
 # Date: July, 2025
 # THIS IS THE SCRIPT I ENDED UP USING FOR THE MANUSCRIPT
@@ -479,18 +480,18 @@ run_analysis <- function(
 }
 
 # ================== Run =====================
-dft_folder <- "results/aoh_results_randomCI_final_8gen_2022"
+dft_folder <- "results/aoh_results_randomCI_final_7gen_2022_nobal"
 if (!dir.exists(dft_folder)) {
   dir.create(dft_folder, recursive = TRUE)
 }
 
 # Example run with 1000 parallel iterations
 example_result <- run_analysis(
-  num_generalist = 8,
+  num_generalist = 7,
   d_near = 0,
   random_seed = 2025,  # Base seed (not used for iterations)
-  balance_specialist_generalist = 1,
-  remove_desert_rocky_aa = TRUE,  # Set to TRUE to remove desert and rocky habitats
+  balance_specialist_generalist = FALSE,
+  remove_desert_rocky_aa = FALSE,  # Set to TRUE to remove desert and rocky habitats
   save_results = TRUE,
   dft_folder = dft_folder,
   n_cores = NULL  # Will use detectCores() - 3
@@ -683,6 +684,7 @@ create_ci_bounds_heatmap <- function(all_raw_odds, land_covers, habitats, dft_fo
 }
 
 # Function to create heatmap using the entire _pos.csv file
+# Function to create heatmap using the entire _pos.csv file
 create_count_heatmap <- function(count_matrix, dft_folder) {
   # Find and read the _pos.csv file
   pos_file <- list.files(dft_folder, pattern = "_pos.csv", full.names = TRUE)
@@ -691,6 +693,9 @@ create_count_heatmap <- function(count_matrix, dft_folder) {
   }
   
   pos_data <- read.csv(pos_file[1])
+  good_col_names <- gsub('\\.', ' ', colnames(pos_data))
+  good_col_names <- gsub("Wetlands  inland", "Wetland (inland)", good_col_names)
+  colnames(pos_data) <- good_col_names
   
   if("X" %in% colnames(pos_data)){
     pos_data$X <- NULL
@@ -706,9 +711,9 @@ create_count_heatmap <- function(count_matrix, dft_folder) {
   
   # Create color categories for habitat columns
   pos_long$color_category <- cut(pos_long$count_value, 
-                                breaks = c(-Inf, 300, 600, 900, Inf),
-                                labels = c("Not a pair (≤300)", "High (300-600)", "Medium (600-900)", "Low (>900)"),
-                                include.lowest = TRUE)
+                                 breaks = c(-Inf, 300, 600, 900, Inf),
+                                 labels = c("Not a pair (≤300)", "Low (300-600)", "Medium (600-900)", "High (>900)"),
+                                 include.lowest = TRUE)
   
   # Add AUC and n_samples data
   auc_data <- data.frame(
@@ -730,11 +735,11 @@ create_count_heatmap <- function(count_matrix, dft_folder) {
   
   # Reorder color categories for legend: Low at top, Not a pair at bottom
   plot_data$color_category <- factor(plot_data$color_category,
-                                   levels = c("Low (>900)", "Medium (600-900)", "High (300-600)", "Not a pair (≤300)", "AUC", "n_samples"))
+                                     levels = c("High (>900)", "Medium (600-900)", "Low (300-600)", "Not a pair (≤300)", "AUC", "n_samples"))
   
   # Order land cover types alphabetically in descending order (Z to A)
   plot_data$land_cover <- factor(plot_data$land_cover, 
-                               levels = sort(unique(plot_data$land_cover), decreasing = TRUE))
+                                 levels = sort(unique(plot_data$land_cover), decreasing = TRUE))
   
   # Set factor levels for habitat to include AUC and n_samples at the end
   habitat_levels <- c(habitat_cols, "AUC", "n_samples")
@@ -748,51 +753,24 @@ create_count_heatmap <- function(count_matrix, dft_folder) {
                                  ifelse(color_category == "n_samples",
                                         as.character(count_value),
                                         as.character(count_value)))), 
-              size = 5, fontface = "bold", color = "black", family = "Times New Roman") +
+              size = 5, fontface = "bold", color = "black", family = "Arial") +
     scale_fill_manual(
-      values = c("Not a pair (≤300)" = "#f7f7f7", "High (300-600)" = "#fee8c8", "Medium (600-900)" = "#fdbb84", "Low (>900)" = "#e34a33",
+      values = c("Not a pair (≤300)" = "#f7f7f7", "Low (300-600)" = "#00b3ff", "Medium (600-900)" = "#dbb300", "High (>900)" = "#659c6a",
                  "AUC" = "white", "n_samples" = "white"),
-      name = "Uncertainty level (counts)"
+      name = "Certainty level (counts)"
     ) +
-    scale_x_discrete(position = "top", 
-                     labels = function(x) {
-                       # Add line breaks for long labels
-                       sapply(x, function(label) {
-                         if (nchar(label) > 15) {
-                           # Insert line break after first space after 15 characters
-                           words <- strsplit(label, " ")[[1]]
-                           result <- ""
-                           current_line <- ""
-                           for (word in words) {
-                             if (nchar(current_line) + nchar(word) + 1 <= 15) {
-                               current_line <- ifelse(current_line == "", word, paste(current_line, word))
-                             } else {
-                               if (current_line != "") {
-                                 result <- ifelse(result == "", current_line, paste(result, current_line, sep = "\n"))
-                               }
-                               current_line <- word
-                             }
-                           }
-                           if (current_line != "") {
-                             result <- ifelse(result == "", current_line, paste(result, current_line, sep = "\n"))
-                           }
-                           result
-                         } else {
-                           label
-                         }
-                       })
-                     }) +
+    scale_x_discrete(position = "bottom") +
     theme_minimal() +
     theme(
-      text = element_text(family = "Times New Roman"),
-      axis.text.x.top = element_text(size = 12, family = "Times New Roman", hjust = 0.5),
-      axis.text.y = element_text(size = 15, family = "Times New Roman"),
-      axis.title.x = element_text(size = 16, face = 'bold', family = "Times New Roman"),
-      axis.title.y = element_text(size = 16, face = 'bold', family = "Times New Roman"),
-      legend.title = element_text(size = 16, family = "Times New Roman"),
-      legend.text = element_text(size = 14, family = "Times New Roman"),
+      text = element_text(family = "Arial"),
+      axis.text.x = element_text(size = 12, family = "Arial", angle = 30, hjust = 1),
+      axis.text.y = element_text(size = 15, family = "Arial"),
+      axis.title.x = element_text(size = 16, face = 'bold', family = "Arial"),
+      axis.title.y = element_text(size = 16, face = 'bold', family = "Arial"),
+      legend.title = element_text(size = 16, family = "Arial"),
+      legend.text = element_text(size = 14, family = "Arial"),
       legend.position = "right",
-      plot.title = element_text(hjust = 0.5, size = 20, face = "bold", family = "Times New Roman"),
+      plot.title = element_text(hjust = 0.5, size = 20, face = "bold", family = "Arial"),
       panel.grid = element_blank(),
       panel.background = element_rect(fill = "white", color = NA)
     ) +
@@ -802,9 +780,6 @@ create_count_heatmap <- function(count_matrix, dft_folder) {
       y = "Land Cover Classes"
     ) +
     coord_fixed(ratio = 0.6)
-  
-  # Save plot
-  ggplot2::ggsave(paste0(dft_folder, "/count_above_1_heatmap.png"), p, width = 16, height = 14, dpi = 300)
   
   return(p)
 }
