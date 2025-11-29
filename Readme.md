@@ -1,11 +1,16 @@
 # A Geographically Replicable Framework for Area of Habitat (AOH) Maps at National and Sub-National Scales
 
-**Authors:** Wenxin Yang<sup>1</sup>, Amy E. Frazier<sup>1</sup>, Lei Song<sup>2</sup>, Patrick R. Roehrdanz<sup>3</sup>, Nickolas McManus<sup>3</sup>, Dan Willett<sup>1</sup>, Elkin A. Noguera-Urbano<sup>4</sup>, Susana Rodríguez Buriticá<sup>4</sup>
+**Authors:** Wenxin Yang<sup>1</sup>, Lei Song<sup>2</sup>, Patrick R. Roehrdanz<sup>3</sup>, Nickolas McManus<sup>3</sup>, Dan Willett<sup>1</sup>, Elkin A. Noguera-Urbano<sup>4</sup>, Susana Rodríguez Buriticá<sup>4</sup>, Kevin Ramos<sup>1</sup>, Mary E. Blair<sup>5</sup>, Cristian A. Cruz-Rodríguez<sup>6</sup>, Carlos Jair Muñoz<sup>7</sup>, Amy E. Frazier<sup>1</sup>
 
 <sup>1</sup>University of California, Santa Barbara, US,
 <sup>2</sup>Rutgers University - New Brunswick, US,
 <sup>3</sup>Conservation International, US,
-<sup>4</sup>Instituto Humboldt, Colombia.
+<sup>4</sup>Instituto Humboldt, Colombia,
+<sup>5</sup>American Museum of Natural History, US,
+<sup>6</sup>University of Montreal, Canada,
+<sup>7</sup>Lund University, Sweden.
+
+<sup>*</sup>Corresponding author. Email: afrazier@ucsb.edu
 
 **Recommended Citation:** To be added.
 
