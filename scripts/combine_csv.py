@@ -12,7 +12,7 @@ def combine_csv_files(root_folder):
     # Read each CSV file and append to the list
     for file in all_files:
         try:
-            df = pd.read_csv(file)
+            df = pd.read_csv(file, encoding='utf-8', encoding_errors='ignore')
             # Optionally add a column to identify the source file
             df['source_file'] = os.path.basename(file)
             df_list.append(df)

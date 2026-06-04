@@ -29,13 +29,13 @@ habitat_info1 <- habitat_info1 %>% filter(!habitat_code %in% c('hab_14.1', 'hab_
 
 
 # ======== prep ideam land cover info =======
-ideam_lc_code <- unique(read.csv('data/occ_pts/allinfo_ideam_cgls.csv')$nvl_2_n)
+ideam_lc_code <- unique(read.csv('data/allinfo_ideam_cgls.csv')$nvl_2_n)
 ideam_lc_code <- paste0("lc_", ideam_lc_code)
 ideam_lc_names <- c("Forest", "Heterogeneous Ag", "Grass/Shrub", "Pasture", "Wetlands", "Artificial Green Space", "Permanent Crops", "Industrial/Commercial Zones", "Urban", "Open Areas", "Continental Waters", "Transition Crops", "Coastal Marshes", "Aquaculture", "Mine and Waste Dump")
 ideam_lc_info <- data.frame(ideam_lc_code = ideam_lc_code,
                             ideam_lc_name = ideam_lc_names)
 
-ideam_lc_code_lv1 <- unique(read.csv('data/occ_pts/allinfo_ideam_cgls.csv')$nvl_1_n)
+ideam_lc_code_lv1 <- unique(read.csv('data/allinfo_ideam_cgls.csv')$nvl_1_n)
 ideam_lc_code_lv1 <- paste0("lc_", ideam_lc_code_lv1)
 ideam_lc_names_lv1 <- c("Forest and semi-natural areas", "Agricultural land", "Wetlands", "Artificial land", "Water surfaces")
 ideam_lc_info_lv1 <- data.frame(ideam_lc_code = ideam_lc_code_lv1,
@@ -43,7 +43,7 @@ ideam_lc_info_lv1 <- data.frame(ideam_lc_code = ideam_lc_code_lv1,
 
 
 # ======== prep cgls land cover info =======
-cgls_lc_code <- unique(read.csv('data/occ_pts/allinfo_ideam_cgls.csv')$cgls_value)
+cgls_lc_code <- unique(read.csv('data/allinfo_ideam_cgls.csv')$cgls_value)
 # order cgls_lc_code ascending
 cgls_lc_code <- sort(cgls_lc_code)
 cgls_lc_code <- paste0('lc_', cgls_lc_code)
