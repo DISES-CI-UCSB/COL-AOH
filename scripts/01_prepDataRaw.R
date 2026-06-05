@@ -9,9 +9,9 @@ packages <- c("sf", "terra", "here", "rgrass", "dplyr", "data.table",
 lapply(packages, library, character.only = TRUE)
 
 setwd('/')
-setwd('Users/wenxinyang/Desktop/GitHub/COL-AOH')
-source('scripts/funcs.R')
-source('scripts/info.R')
+setwd('Users/wenxinyang/Desktop/GitHub/colander')
+source('scripts/refineBiomodelos/funcs.R')
+source('scripts/refineBiomodelos/info.R')
 
 col_to_keep <- c('scientificName', 'decimalLatitude', 'decimalLongitude', 
                  'year', 'eventDate', 
@@ -19,37 +19,58 @@ col_to_keep <- c('scientificName', 'decimalLatitude', 'decimalLongitude',
                  'coordinateUncertaintyInMeters', 'taxonomicStatus', 'duplicated',
                  'alt', 'extremo', 'spatialDuplicated')
 
-
+analysis_cols <- c('scientificName', 'decimalLatitude', 'decimalLongitude',
+                   'finalYear', 'taxa')
 
 # ================= 0. Read in and clean occurrence points ==================
 # should also compare with the formatted records to be consistent
+## -------------- amphibians ---------
 dfanf <- read.csv('data/raw_occ_pts/anfibios_raw_pts.csv') %>% select(all_of(col_to_keep))
 length(unique(dfanf$scientificName))
 dfanf$taxa <- 'anfibios'
 summary(dfanf$year) # no NA values
-
+dfanf <- dfanf %>% mutate(
+  finalYear = year
+) %>% select(all_of(analysis_cols))
+## ------------- birds ---------------
 dfavs <- read.csv('data/raw_occ_pts/aves_raw_pts.csv') %>% select(all_of(col_to_keep))
 length(unique(dfavs$scientificName))
 dfavs$taxa <- 'aves'
 summary(dfavs$year) # has 0 and NA values
 
+dfavs <- dfavs %>%
+  mutate(
+    year = case_when(
+      year > 0 ~ year,
+      TRUE ~ NA
+    ),
+    eventDate = case_when(!eventDate %in% c("NA--NA", "") ~ eventDate, 
+                          TRUE ~ '0'),
+    eventYear = case_when(
+      str_detect(eventDate, "^\\d{4}-") ~ as.character(str_extract(eventDate, "\\d{4}")),
+      str_detect(eventDate, "^[^/]*/[^/]*/") ~ as.character(str_match(eventDate, "^[^/]*/[^/]*/(\\d{4})")[,2]),
+      str_detect(eventDate, "^\\d{4}/*") ~ as.character(str_extract(eventDate, "^\\d{4}[^/]*")),
+      TRUE ~ as.character(eventDate)
+    ),
+    eventYear = as.numeric(eventYear),
+    eventYear = case_when(eventYear>1700 & eventYear<2025 ~ eventYear, 
+                          TRUE ~ NA)
+    )
+
+dfavsTime <- dfavs %>% filter(!is.na(year) | !is.na(eventYear)) %>% mutate(
+  finalYear = ifelse(!is.na(year), year, eventYear)
+) %>% select(all_of(analysis_cols))
+nrow(dfavsTime)/nrow(dfavs)
+summary(dfavsTime$finalYear)
+
+## ------------- mammals ---------------
 dfmam <- fread('data/raw_occ_pts/mamiferos_raw_pts.csv') %>% 
-  select(all_of(col_to_keep),'createdDate','reportedDate')
+  select(all_of(col_to_keep),'createdDate','reportedDate') %>%
+  mutate(reportedDate = as.character(reportedDate),
+         createdDate = as.character(createdDate))
 length(unique(dfmam$scientificName))
 dfmam$taxa <- 'mamiferos'
 summary(dfmam$year) # has 0 and NA values
-
-
-dfmam$tmpcol = as.character(dfmam$eventDate)
-
-dfmam <- dfmam %>% mutate(
-  eventDate = case_when(!eventDate %in% c("NA--NA", "") | (reportedDate!="") & (createdDate!="") ~ as.character(eventDate), 
-                        TRUE ~ '0'),
-  eventYear = case_when(
-    str_detect(tmpcol, "^\\d{4}-") ~ as.character(str_extract(tmpcol, "\\d{4}")),
-    TRUE ~ '0')
-)
-
 
 dfmam <- dfmam %>%
   mutate(
@@ -66,39 +87,83 @@ dfmam <- dfmam %>%
   eventYear = as.numeric(eventYear),
   eventYear = case_when(eventYear>1700 & eventYear<2025 ~ eventYear, 
                         TRUE ~ NA)
+) %>% select(
+  -c(reportedDate, createdDate)
 )
 summary(dfmam$eventYear)
 
 dfmamTime <- dfmam %>% filter(!is.na(year) | !is.na(eventYear)) %>% mutate(
   finalYear = ifelse(!is.na(year), year, eventYear)
-)
+) %>% select(all_of(analysis_cols))
 nrow(dfmamTime)/nrow(dfmam)
 
 
+## ------------------- reptiles -------------------
 dfrep <- read.csv('data/raw_occ_pts/squamata_raw_pts.csv') %>% select(all_of(col_to_keep))
 length(unique(dfrep$scientificName))
 dfrep$taxa <- 'squamata'
 summary(dfrep$year)
+
+dfrep <- dfrep %>%
+  mutate(
+    eventDate = case_when(!eventDate %in% c("NA--NA", "") ~ eventDate, 
+                          TRUE ~ '0'),
+    eventYear = case_when(
+      str_detect(eventDate, "^\\d{4}-") ~ as.character(str_extract(eventDate, "\\d{4}")),
+      str_detect(eventDate, "^[^/]*/[^/]*/") ~ as.character(str_match(eventDate, "^[^/]*/[^/]*/(\\d{4})")[,2]),
+      str_detect(eventDate, "^\\d{4}/*") ~ as.character(str_extract(eventDate, "^\\d{4}[^/]*")),
+      TRUE ~ as.character(eventDate)
+    ),
+    eventYear = as.numeric(eventYear),
+    eventYear = case_when(eventYear>1700 & eventYear<2025 ~ eventYear, 
+                          TRUE ~ NA)
+  )
+
+dfrepTime <- dfrep %>% filter(!is.na(year) | !is.na(eventYear)) %>% mutate(
+  finalYear = ifelse(!is.na(year), year, eventYear)
+) %>% select(all_of(analysis_cols))
+nrow(dfrepTime)/nrow(dfrep)
+summary(dfavsTime$finalYear)
+nrow(dfrep)-nrow(dfrepTime) # not much changed but okay
+
 # colnames(dfanf) <- colnames(dfavs)
+
 # ================= 1. Merge occurrence point files ==================
-full_list <- rbind(dfanf, dfavs, dfmam, dfrep)
-nrow(full_list) == nrow(dfanf) + nrow(dfavs) + nrow(dfmam) + nrow(dfrep)
+full_list <- rbind(dfanf, dfavsTime, dfmamTime, dfrepTime)
+nrow(full_list) == nrow(dfanf) + nrow(dfavsTime) + nrow(dfmamTime) + nrow(dfrepTime)
 
 names_li <- unique(full_list$species)
 
+## ---------------- temporal filtering ---------------------
+year_rec = 2012
+recent_list = full_list %>% filter(finalYear >= year_rec)
+table(recent_list$finalYear)
+table(recent_list$taxa)
+table(full_list$taxa)
 
+## ---------------- spatial thinning --------------------
+# need a fishnet of Colombia at 100m resolution to match with the AOH maps
+# create a fishnet first
+
+
+
+
+
+
+
+
+## --------------- other check points -----------------
 # check for spatial coverage criteria
 # count species with < 10 pts
-occ_count <- as.data.frame(table(full_list$species))
+occ_count <- as.data.frame(table(recent_list$scientificName))
 nrow(occ_count[occ_count$Freq < 10,])/nrow(occ_count)
-# ~ 10% sepcies have < 10 points, we are not removing them
+# ~ 30% sepcies have < 10 points, we are not removing them
 perc_occ <- 0.02*nrow(full_list)
 nrow(occ_count[occ_count$Freq > perc_occ,])
-# no species have more than 2% occ points
+# 1 species has more than 2% occ points
 
 # ================= 2. Join points with species preference file ================ 
-
-pref_path <- file.path('data/occ_pts/', 'animals_preference.csv')
+pref_path <- file.path('data', 'animals_preference.csv')
 df_pref <- read.csv(pref_path, sep=';')
 
 names_li_2 <- unique(df_pref$name)
@@ -170,7 +235,7 @@ colnames(df_pref_sp) <- c('name', paste0('hab_', colnames(df_pref_sp)[-1]))
 # read in land cover data
 # geometry was fixed using QGIS
 # lc <- read_sf('data/IDEAM_landcover_2018/fixed.shp') # year 2018
-lc <- read_sf('data/Corine_hab_COL/Cobertura_tierra_100K_periodo_2022_limite_administrativo/ECOSISTEMAS_18062025/ECOSISTEMAS_18062025.gpkg') # year 2022
+lc <- read_sf('data/landcover/ideam_2022/Cobertura_tierra_100K_periodo_2022_limite_administrativo/ECOSISTEMAS_18062025/ECOSISTEMAS_18062025.gpkg') # year 2022
 # plot(lc['nivel_2'])
 
 colnames(lc)
