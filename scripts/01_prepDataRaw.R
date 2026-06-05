@@ -17,10 +17,11 @@ col_to_keep <- c('scientificName', 'decimalLatitude', 'decimalLongitude',
                  'year', 'eventDate', 
                  #'createdDate', 'reportedDate', 'yyyy','eventTime',
                  'coordinateUncertaintyInMeters', 'taxonomicStatus', 'duplicated',
-                 'alt', 'extremo', 'spatialDuplicated')
+                 'alt', 'extremo', 'spatialDuplicated',
+                 'source_file')
 
 analysis_cols <- c('scientificName', 'decimalLatitude', 'decimalLongitude',
-                   'finalYear', 'taxa')
+                   'year', 'taxa', 'eventYear')
 
 # ================= 0. Read in and clean occurrence points ==================
 # should also compare with the formatted records to be consistent
@@ -30,10 +31,21 @@ length(unique(dfanf$scientificName))
 dfanf$taxa <- 'anfibios'
 summary(dfanf$year) # no NA values
 dfanf <- dfanf %>% mutate(
-  finalYear = year
-) %>% select(all_of(analysis_cols))
+  eventYear = year
+) 
+nrow(dfanf %>% filter(scientificName==""))
+dfanfAll <- dfanf %>% select(all_of(analysis_cols))
+
 ## ------------- birds ---------------
-dfavs <- read.csv('data/raw_occ_pts/aves_raw_pts.csv') %>% select(all_of(col_to_keep))
+dfavs <- read.csv('data/raw_occ_pts/aves_raw_pts.csv') %>% 
+  # if a row does not have scientific name extract it from source file name
+  select(all_of(col_to_keep)) %>% mutate( 
+    scientificName = ifelse(
+      scientificName=="", 
+      source_file %>% str_remove("\\.csv$") %>% str_replace_all("_", " "), 
+      scientificName)
+)
+nrow(dfavs %>% filter(scientificName==""))
 length(unique(dfavs$scientificName))
 dfavs$taxa <- 'aves'
 summary(dfavs$year) # has 0 and NA values
@@ -57,20 +69,21 @@ dfavs <- dfavs %>%
                           TRUE ~ NA)
     )
 
-dfavsTime <- dfavs %>% filter(!is.na(year) | !is.na(eventYear)) %>% mutate(
-  finalYear = ifelse(!is.na(year), year, eventYear)
-) %>% select(all_of(analysis_cols))
-nrow(dfavsTime)/nrow(dfavs)
-summary(dfavsTime$finalYear)
+dfavsAll <- dfavs %>% select(all_of(analysis_cols))
 
 ## ------------- mammals ---------------
 dfmam <- fread('data/raw_occ_pts/mamiferos_raw_pts.csv') %>% 
   select(all_of(col_to_keep),'createdDate','reportedDate') %>%
   mutate(reportedDate = as.character(reportedDate),
-         createdDate = as.character(createdDate))
+         createdDate = as.character(createdDate),
+         scientificName = ifelse(
+           scientificName=="", 
+           source_file %>% str_remove("\\.csv$") %>% str_replace_all("_", " "), 
+           scientificName))
 length(unique(dfmam$scientificName))
 dfmam$taxa <- 'mamiferos'
 summary(dfmam$year) # has 0 and NA values
+nrow(dfmam %>% filter(scientificName==""))
 
 dfmam <- dfmam %>%
   mutate(
@@ -92,17 +105,21 @@ dfmam <- dfmam %>%
 )
 summary(dfmam$eventYear)
 
-dfmamTime <- dfmam %>% filter(!is.na(year) | !is.na(eventYear)) %>% mutate(
-  finalYear = ifelse(!is.na(year), year, eventYear)
-) %>% select(all_of(analysis_cols))
-nrow(dfmamTime)/nrow(dfmam)
-
+dfmamAll <- dfmam %>% select(all_of(analysis_cols))
 
 ## ------------------- reptiles -------------------
-dfrep <- read.csv('data/raw_occ_pts/squamata_raw_pts.csv') %>% select(all_of(col_to_keep))
+dfrep <- read.csv('data/raw_occ_pts/squamata_raw_pts.csv') %>% 
+  select(all_of(col_to_keep)) %>% mutate(
+    scientificName = ifelse(
+      scientificName=="", 
+      source_file %>% str_remove("\\.csv$") %>% str_replace_all("_", " "), 
+      scientificName)
+  )
 length(unique(dfrep$scientificName))
 dfrep$taxa <- 'squamata'
 summary(dfrep$year)
+nrow(dfrep %>% filter(scientificName==""))
+
 
 dfrep <- dfrep %>%
   mutate(
@@ -119,51 +136,61 @@ dfrep <- dfrep %>%
                           TRUE ~ NA)
   )
 
-dfrepTime <- dfrep %>% filter(!is.na(year) | !is.na(eventYear)) %>% mutate(
-  finalYear = ifelse(!is.na(year), year, eventYear)
-) %>% select(all_of(analysis_cols))
-nrow(dfrepTime)/nrow(dfrep)
-summary(dfavsTime$finalYear)
-nrow(dfrep)-nrow(dfrepTime) # not much changed but okay
-
-# colnames(dfanf) <- colnames(dfavs)
+dfrepAll <- dfrep %>% select(all_of(analysis_cols))
 
 # ================= 1. Merge occurrence point files ==================
-full_list <- rbind(dfanf, dfavsTime, dfmamTime, dfrepTime)
-nrow(full_list) == nrow(dfanf) + nrow(dfavsTime) + nrow(dfmamTime) + nrow(dfrepTime)
+full_list <- rbind(dfanfAll, dfavsAll, dfmamAll, dfrepAll) %>% mutate(
+  finalYear = ifelse(!is.na(year), year, eventYear)
+)
+nrow(full_list) == nrow(dfanfAll) + nrow(dfavsAll) + nrow(dfmamAll) + nrow(dfrepAll)
 
-names_li <- unique(full_list$species)
+full_list_time <- full_list %>% filter(!is.na(finalYear) & finalYear >0)
+
+nrow(full_list) - nrow(full_list_time)
+
+names_li <- unique(full_list_time$species)
 
 ## ---------------- temporal filtering ---------------------
 year_rec = 2012
-recent_list = full_list %>% filter(finalYear >= year_rec)
-table(recent_list$finalYear)
-table(recent_list$taxa)
-table(full_list$taxa)
-
+recent_list = full_list_time %>% filter(finalYear >= year_rec)
+recent_list$id <- 1:nrow(recent_list)
 ## ---------------- spatial thinning --------------------
 # need a fishnet of Colombia at 100m resolution to match with the AOH maps
-# create a fishnet first
+rast_tmplt <- rast('data/Corine_hab_COL/ideam_2022_level2_100m.tif')
+rast_tmplt <- project(rast_tmplt, 'EPSG:4326')
+cell_ids <- cellFromXY(rast_tmplt, recent_list[, c('decimalLongitude', 'decimalLatitude')])
+length(cell_ids) == nrow(recent_list)
+sum(is.na(cell_ids))
 
+recent_list_thinned <- recent_list %>%
+  mutate(cell_id = cell_ids) %>%
+  filter(!is.na(cell_id)) %>%
+  group_by(scientificName, cell_id) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(-cell_id)
 
+names_before <- unique(recent_list$scientificName)
+names_thinned <- unique(recent_list_thinned$scientificName)
+setdiff(names_before, names_thinned)
 
-
-
-
-
+  
+nrow(recent_list_thinned)/nrow(recent_list)
+length(unique(recent_list_thinned$scientificName))
+length(unique(recent_list$scientificName))
 
 ## --------------- other check points -----------------
 # check for spatial coverage criteria
 # count species with < 10 pts
-occ_count <- as.data.frame(table(recent_list$scientificName))
+occ_count <- as.data.frame(table(recent_list_thinned$scientificName))
 nrow(occ_count[occ_count$Freq < 10,])/nrow(occ_count)
-# ~ 30% sepcies have < 10 points, we are not removing them
+# ~ 40% sepcies have < 10 points, we are not removing them
 perc_occ <- 0.02*nrow(full_list)
 nrow(occ_count[occ_count$Freq > perc_occ,])
-# 1 species has more than 2% occ points
+# 0 species has more than 2% occ points
 
 # ================= 2. Join points with species preference file ================ 
-pref_path <- file.path('data', 'animals_preference.csv')
+pref_path <- file.path('data/occ_pts', 'animals_preference.csv')
 df_pref <- read.csv(pref_path, sep=';')
 
 names_li_2 <- unique(df_pref$name)
@@ -235,7 +262,7 @@ colnames(df_pref_sp) <- c('name', paste0('hab_', colnames(df_pref_sp)[-1]))
 # read in land cover data
 # geometry was fixed using QGIS
 # lc <- read_sf('data/IDEAM_landcover_2018/fixed.shp') # year 2018
-lc <- read_sf('data/landcover/ideam_2022/Cobertura_tierra_100K_periodo_2022_limite_administrativo/ECOSISTEMAS_18062025/ECOSISTEMAS_18062025.gpkg') # year 2022
+lc <- read_sf('data/Corine_hab_COL/Cobertura_tierra_100K_periodo_2022_limite_administrativo/ECOSISTEMAS_18062025/ECOSISTEMAS_18062025.gpkg') # year 2022
 # plot(lc['nivel_2'])
 
 colnames(lc)
@@ -251,9 +278,9 @@ lc_1 <- lc %>% select(leyenda_num, nivel_1_num, nivel_3_num, nivel_2_num)
 # , geometry
 # extract land cover types for pt values
 
-# 1. convert full_list into a point sf object
+## ------------ (1) convert full_list into a point sf object -------------
 # first clean and validate coordinates
-full_list <- full_list %>%
+final_list <- recent_list_thinned %>%
   # remove rows with NA coordinates
   filter(!is.na(decimalLongitude) & !is.na(decimalLatitude)) %>%
   # filter to only valid coordinate ranges
@@ -261,42 +288,14 @@ full_list <- full_list %>%
   filter(decimalLatitude >= -90 & decimalLatitude <= 90)
 
 # convert to sf with error checking
-all_pts <- full_list %>% 
+all_pts <- final_list %>% 
     st_as_sf(coords = c("decimalLongitude", "decimalLatitude"), 
              crs = 4326) %>%
   st_transform(crs = st_crs(lc_1))
 # export all_pts
 # st_write(all_pts, 'data/occ_pts/all_pts.shp')
-  
-# ---------------- side task: compute distance to nearest boundary --------------
-# dissolve lc_1 by nivel_1_num
-#lc_1_dissolve <- lc_1 %>% group_by(nivel_1_num) %>% summarise()
-lc_1_dissolve <- st_read('data/IDEAM_landcover_2018/level1.shp')
-#st_write(lc_1_dissolve, 'data/IDEAM_landcover_2018/level1.shp')
 
-unique(lc_1$nivel_1_num)
-#lc_2_dissolve <- lc %>% group_by(nivel_2_num) %>% summarise()
-#st_write(lc_2_dissolve, 'data/IDEAM_landcover_2018/level2.shp')
-
-
-# check crs before running the analysis
-crs(all_pts)
-crs(lc_1_dissolve)
-crs(all_pts) == crs(lc_1_dissolve)
-
-# compute distance from each point to lc_1_dissolve
-all_pts_lc_lv1 <- calc_dist_to_boundary(all_pts, lc_1_dissolve)
-all_pts$dist_to_boundary <- all_pts_lc_lv1
-# st_write(all_pts, 'data/occ_pts/all_pts_dist_to_boundary.shp')
-# remove pts outside of boundary 180 -180 and -90 90
-coords <- st_coordinates(all_pts)
-all_pts <- all_pts[coords[,1] >= -180 & coords[,1] <= 180 & 
-                   coords[,2] >= -90 & coords[,2] <= 90,]
-
-head(all_pts)
-write.csv(all_pts, 'data/occ_pts/all_pts_dist_to_boundary_lv1.csv')
-# ---------------- side task completed ------------------
-# 2. spatial join all_pts with lc_1
+## --------------- (2) spatial join all_pts with lc_1 ---------------
 # First make sure geometries are valid
 lc_1 <- st_make_valid(lc_1)
 all_pts <- st_make_valid(all_pts)
@@ -314,35 +313,12 @@ if(inherits(all_pts_lc, "try-error")) {
 # keep only rows with non na leyenda_num
 all_pts_lc_col <- all_pts_lc %>% filter(!is.na(leyenda_num))
 # export all_pts_lc_col
-summary(all_pts_lc_col$dist_to_boundary)
-st_write(all_pts_lc_col, 'data/occ_pts/all_pts_lc_col.shp', append = FALSE)
-
-# ============= 3.2 CGLS dataset =============
-# read in all_pts_lc_col
-all_pts_lc_col <- vect('data/occ_pts/all_pts_lc_col.shp')
-
-# read in CGLS dataset
-cgls <- rast('data/PROBAV_LC100_global_v3.0.1_2015-base_Discrete-Classification-map_EPSG-4326.tif')
-
-# convert the crs of all_pts_lc_col to the crs of cgls
-all_pts_lc_col <- project(all_pts_lc_col, cgls)
-
-# get the values of cgls at the points of all_pts_lc_col
-# and rename column names to "cgls_value"
-cgls_pts <- terra::extract(cgls, all_pts_lc_col)
-colnames(cgls_pts) <- c('ID', 'value')
-
-# add the values to all_pts_lc_col
-all_pts_lc_col$cgls_value <- cgls_pts$value
-
-# export all_pts_lc_col with terra package into shapefile
-terra::writeVector(all_pts_lc_col, 'data/occ_pts/all_pts_lc_col_cgls.shp', overwrite=TRUE)
-
+st_write(all_pts_lc_col, 'data/occ_pts/all_pts_lc_col_0605_2012.shp', append = FALSE)
 # ================= 4. Merge and format data ==================
-all_pts_lc_col <- st_read('data/occ_pts/all_pts_lc_col_cgls.shp')
+#all_pts_lc_col <- st_read('data/occ_pts/all_pts_lc_col_0605_2012.shp')
 
 # merge all_pts_lc_col with df_pref_sp
-all_pts_lc_col_pref <- merge(all_pts_lc_col, df_pref_sp, by.x = 'species', by.y = 'name', all.x = TRUE)
+all_pts_lc_col_pref <- merge(all_pts_lc_col, df_pref_sp, by.x = 'scntfcN', by.y = 'name', all.x = TRUE)
 # remove geogmetry of all_pts_lc_col_pref
 df_all_info <- all_pts_lc_col_pref
 # Add longitude and latitude columns from geometry
@@ -351,25 +327,27 @@ df_all_info$longitude <- coords[,1]
 df_all_info$latitude <- coords[,2]
 
 df_all_info$geometry <- NULL
-write.csv(df_all_info, 'data/occ_pts/allinfo_ideam_cgls_coords_2022.csv')
+write.csv(df_all_info, 'data/occ_pts/allinfo_ideam_coords_2012_0605.csv')
 
 gc()
 
-
-summary(df_all_info$dst_t_b)
-
-# df_not_bound <- df_all_info %>% filter(dst_t_b > 0.001)
-
 # ================= 5. Check problematic habitat types ==================
-df <- read.csv('data/occ_pts/allinfo_ideam_cgls.csv')
+df <- read.csv('data/occ_pts/allinfo_ideam_coords_2012_0605.csv')
 df[is.na(df)] = 0
+
+cols_remove <- c('X', 'occ_ID', 'sorc_fl', 'taxa', 'leyenda_num','nivel_3_num', 'nivel_2_num', 'nivel_1_num', 'finalYear', 'longitude', 'latitude', 'lynd_nm','nvl_1_n', 'nvl_3_n', 'nvl_2_n', 'finalYr', 'eventYr', 'year', 'id')
+# get how many spp per hab pref
+head(df)
+df_spp_hab <- df %>% select(-any_of(cols_remove)) %>% unique()
+info_spp_hab <- as.data.frame(colSums(df_spp_hab %>% select(-scntfcN)))
+
 
 getInfo <- function(habitat_code){
   thisdf <- df[df[habitat_code]==1,]
   # drop the columns that are not needed
-  thisdf <- thisdf[,-which(names(thisdf) %in% c('X', 'occ_ID', habitat_code, 'sorc_fl', 'taxa', 'lynd_nm','nvl_3_n', 'nvl_2_n', 'cgls_value'))]
+  thisdf <- thisdf[,-which(names(thisdf) %in% c(cols_remove, habitat_code))]
   
-  thisinfo <- as.data.frame(colSums(thisdf %>% select(-species)))
+  thisinfo <- as.data.frame(colSums(thisdf %>% select(-scntfcN)))
   colnames(thisinfo) <- c('freq')
   rownames(thisinfo) <- seq(1, nrow(thisinfo), 1)
   thisinfo$hab_type <- colnames(thisdf)[-1]
@@ -382,10 +360,10 @@ getInfo <- function(habitat_code){
 checkSpecialist <- function(habitat_code){
   thisdf <- df[df[habitat_code]==1,]
   # drop the columns that are not needed
-  thisdf <- thisdf[,-which(names(thisdf) %in% c('X', 'occ_ID', habitat_code, 'sorc_fl', 'taxa', 'lynd_nm','nvl_3_n', 'nvl_2_n', 'cgls_value'))]
+  thisdf <- thisdf[,-which(names(thisdf) %in% c(cols_remove, habitat_code))]
   
   thisinfo <- getInfo(habitat_code)
-  thisdf_0 <- thisdf %>% filter(rowSums(thisdf %>% select(-species))==0)
+  thisdf_0 <- thisdf %>% filter(rowSums(thisdf %>% select(-scntfcN))==0)
   
   print(nrow(thisdf_0))
   return(nrow(thisdf_0))
@@ -395,10 +373,15 @@ checkSpecialist <- function(habitat_code){
 habitat_info_sp <- habitat_info
 habitat_info_sp$sp_num <- 0
 for(i in 1:nrow(habitat_info_sp)){
+  print(habitat_info_sp[i,]$habitat_name)
   code_i <- habitat_info_sp[i,]$habitat_code
   num_i <- checkSpecialist(code_i)
   habitat_info_sp[i,]$sp_num <- num_i
 }
+
+
+
+write.csv(habitat_info_sp, 'results/habitat_info_specialist_2012onwards.csv')
 
 # rocky areas
 info_6 <- getInfo('hab_6')
