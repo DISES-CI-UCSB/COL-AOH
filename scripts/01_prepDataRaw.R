@@ -26,35 +26,46 @@ col_to_keep <- c('scientificName', 'decimalLatitude', 'decimalLongitude',
 dfanf <- read.csv('data/raw_occ_pts/anfibios_raw_pts.csv') %>% select(all_of(col_to_keep))
 length(unique(dfanf$scientificName))
 dfanf$taxa <- 'anfibios'
-colnames(dfanf)
-summary(dfanf$year)
-hist(dfanf$year)
+summary(dfanf$year) # no NA values
 
 dfavs <- read.csv('data/raw_occ_pts/aves_raw_pts.csv') %>% select(all_of(col_to_keep))
-colnames(dfavs)
 length(unique(dfavs$scientificName))
 dfavs$taxa <- 'aves'
-summary(dfavs$year)
+summary(dfavs$year) # has 0 and NA values
 
-dfmam <- read.csv('data/raw_occ_pts/mamiferos_raw_pts.csv') %>% 
+dfmam <- fread('data/raw_occ_pts/mamiferos_raw_pts.csv') %>% 
   select(all_of(col_to_keep),'createdDate','reportedDate')
 length(unique(dfmam$scientificName))
 dfmam$taxa <- 'mamiferos'
-nrow(dfmam %>% filter(is.na(year) | year==0))/nrow(dfmam) # almost half of mammal points do not have a recorded 'year' value
+summary(dfmam$year) # has 0 and NA values
+
+
+dfmam$tmpcol = as.character(dfmam$eventDate)
+
+dfmam <- dfmam %>% mutate(
+  eventDate = case_when(!eventDate %in% c("NA--NA", "") | (reportedDate!="") & (createdDate!="") ~ as.character(eventDate), 
+                        TRUE ~ '0'),
+  eventYear = case_when(
+    str_detect(tmpcol, "^\\d{4}-") ~ as.character(str_extract(tmpcol, "\\d{4}")),
+    TRUE ~ '0')
+)
+
 
 dfmam <- dfmam %>%
   mutate(
-    eventDate = ifelse(!eventDate %in% c("NA--NA", "") | (reportedDate!="") & (createdDate!=""), eventDate, 0),
+    eventDate = case_when(!eventDate %in% c("NA--NA", "") | (reportedDate!="") & (createdDate!="") ~ eventDate, 
+                          TRUE ~ '0'),
     eventYear = case_when(
-      str_detect(eventDate, "^\\d{4}-") ~ str_extract(eventDate, "\\d{4}"),
-      str_detect(eventDate, "^[^/]*/[^/]*/") ~ str_match(eventDate, "^[^/]*/[^/]*/(\\d{4})")[,2],
-      str_detect(eventDate, "^\\d{4}/*") ~ str_extract(eventDate, "^\\d{4}[^/]*"),
-      eventDate==0 & reportedDate !="" ~ str_extract(reportedDate, "\\d{4}"),
-      eventDate==0 & createdDate !="" ~ str_extract(createdDate, "\\d{4}"),
+      str_detect(eventDate, "^\\d{4}-") ~ as.character(str_extract(eventDate, "\\d{4}")),
+      str_detect(eventDate, "^[^/]*/[^/]*/") ~ as.character(str_match(eventDate, "^[^/]*/[^/]*/(\\d{4})")[,2]),
+      str_detect(eventDate, "^\\d{4}/*") ~ as.character(str_extract(eventDate, "^\\d{4}[^/]*")),
+      eventDate=='0' & reportedDate !="" ~ as.character(str_extract(reportedDate, "\\d{4}")),
+      eventDate=='0' & createdDate !="" ~ as.character(str_extract(createdDate, "\\d{4}")),
       TRUE ~ as.character(eventDate)
   ),
   eventYear = as.numeric(eventYear),
-  eventYear = ifelse(eventYear>1700 & eventYear<2025, eventYear, NA)
+  eventYear = case_when(eventYear>1700 & eventYear<2025 ~ eventYear, 
+                        TRUE ~ NA)
 )
 summary(dfmam$eventYear)
 
