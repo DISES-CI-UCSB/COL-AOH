@@ -12,7 +12,7 @@ run_analysis <- function(
   random_seed = 2025,
   # data filtering parameters
   balance_specialist_generalist = 1, # balance specialist vs non specialist by taxa
-  remove_desert_rocky_aa = TRUE, # remove desert (hab_6), rocky (hab_8), and artificial-aquatic (hab_15) habitats
+  remove_desert_rocky_aa = FALSE, # remove desert (hab_6), rocky (hab_8), and artificial-aquatic (hab_15) habitats
   # output parameters
   output_suffix = paste0("_", format(Sys.Date(), "%m%d"), "_", format(Sys.Date(), "%Y")),
   save_results = TRUE,
@@ -40,7 +40,13 @@ run_analysis <- function(
   
   
   # ======= 2. Read in & prep data =======
-  df_all <- read.csv('data/occ_pts/allinfo_ideam_cgls_coords_2022.csv')
+  df_all <- read.csv('data/occ_pts/allinfo_ideam_coords_2012_0605.csv') %>% select(-any_of(c('nvl_1_n', 'nivel_1_num')))
+  if('scientificName' %in% colnames(df_all)){
+    df_all <- df_all %>% mutate(species = scientificName) %>% select(-scientificName)
+  }
+  if('scntfcN' %in% colnames(df_all)){
+    df_all <- df_all %>% mutate(species = scntfcN) %>% select(-scntfcN)
+  }
   # df_all <- read.csv('data/occ_pts/allinfo_ideam_cgls_coords.csv') # 2018
   
   if(!'nvl_2_n' %in% colnames(df_all)){
@@ -86,6 +92,8 @@ run_analysis <- function(
   }
   
   # remove rows with NA values
+  df_all_info <- df_all_info %>% select(-any_of(c('year', 'eventYr', 'finalYr','id')))
+  # tmp <- df_all_info[!complete.cases(df_all_info),]
   df_all_info <- df_all_info[complete.cases(df_all_info), ]
   sum(is.na(df_all_info))
   df_all_info$X <- NULL
@@ -93,12 +101,21 @@ run_analysis <- function(
   # sum all columns that start with "hab_"
   df_all_info$sum <- rowSums(df_all_info[,grep("^hab_", colnames(df_all_info))])
   df_all_info <- df_all_info %>% filter(sum>0) %>% select(-sum)
+  if('scntfcN' %in% colnames(df_all_info)){
+    df_all_info$species <- df_all_info$scntfcN
+    df_all_info$scntfcN <- NULL
+  }
   
   # colSums(df_all_info[,grep("^hab_", colnames(df_all_info))])
   
   ## ======= 2.1 remove generalist species =======
   li_generalist <- unique((df_basic_info %>% filter(type == 'generalist'))$name)
-  df_all_info <- df_all_info %>% filter(!species %in% li_generalist)
+  if('species' %in% colnames(df_all_info)){
+    df_all_info <- df_all_info %>% filter(!species %in% li_generalist)
+  } else if('scntfcN' %in% colnames(df_all_info)){
+    df_all_info <- df_all_info %>% filter(!scntfcN %in% li_generalist)
+  }
+  
   
   ## ========= 4.1 Generate 1000 matrices in parallel =======
   cat("Setting up parallel processing for 1000 iterations...\n")
@@ -143,6 +160,7 @@ run_analysis <- function(
         
         # Remove any NA or empty values
         unique_landcovers <- unique_landcovers[!is.na(unique_landcovers) & unique_landcovers != ""]
+        #unique_landcovers <- as.numeric(unique_landcovers)
         
         if (length(unique_landcovers) == 0) {
           stop("No valid land cover values found")
@@ -244,7 +262,8 @@ run_analysis <- function(
       # Balance specialist vs non-specialist within each taxa for this iteration
       if (balance_specialist_generalist) {
         set.seed(seed)  # Use the iteration seed
-        records <- merge(df_all_info, df_basic_info, by.x='species', by.y='name')
+        spp_field <- ifelse('species' %in% colnames(df_all_info), 'species', 'scntfcN')
+        records <- merge(df_all_info, df_basic_info, by.x=spp_field, by.y='name')
         balanced_rec <- data.frame(matrix(nrow=0, ncol=ncol(records)))
         colnames(balanced_rec) <- colnames(records)
         
@@ -263,7 +282,8 @@ run_analysis <- function(
         # Remove duplicates that might occur from overlapping strata
         balanced_rec <- balanced_rec %>% distinct()
       } else {
-        balanced_rec <- merge(df_all_info, df_basic_info, by.x='species', by.y='name')
+        spp_field <- ifelse('species' %in% colnames(df_all_info), 'species', 'scntfcN')
+        balanced_rec <- merge(df_all_info, df_basic_info, by.x=spp_field, by.y='name')
       }
       
       # Generate matrix for this iteration
@@ -480,17 +500,17 @@ run_analysis <- function(
 }
 
 # ================== Run =====================
-dft_folder <- "results/aoh_results_randomCI_final_7gen_2022_nobal"
+dft_folder <- "results/aoh_results_randomCI_5gen_2012_2022_bal_keepaa_spthi"
 if (!dir.exists(dft_folder)) {
   dir.create(dft_folder, recursive = TRUE)
 }
 
 # Example run with 1000 parallel iterations
 example_result <- run_analysis(
-  num_generalist = 7,
+  num_generalist = 5,
   d_near = 0,
   random_seed = 2025,  # Base seed (not used for iterations)
-  balance_specialist_generalist = FALSE,
+  balance_specialist_generalist = 1,
   remove_desert_rocky_aa = FALSE,  # Set to TRUE to remove desert and rocky habitats
   save_results = TRUE,
   dft_folder = dft_folder,
@@ -784,7 +804,8 @@ create_count_heatmap <- function(count_matrix, dft_folder) {
   return(p)
 }
 
-# Analyze the results
+
+## ------------------ analyze results ------------------
 if (exists("example_result") && !is.null(example_result$all_results)) {
   cat("\n=== Analyzing Results ===\n")
   

@@ -153,6 +153,7 @@ names_li <- unique(full_list_time$species)
 ## ---------------- temporal filtering ---------------------
 year_rec = 2012
 recent_list = full_list_time %>% filter(finalYear >= year_rec)
+#recent_list <- full_list
 recent_list$id <- 1:nrow(recent_list)
 ## ---------------- spatial thinning --------------------
 # need a fishnet of Colombia at 100m resolution to match with the AOH maps
@@ -313,12 +314,13 @@ if(inherits(all_pts_lc, "try-error")) {
 # keep only rows with non na leyenda_num
 all_pts_lc_col <- all_pts_lc %>% filter(!is.na(leyenda_num))
 # export all_pts_lc_col
-st_write(all_pts_lc_col, 'data/occ_pts/all_pts_lc_col_0605_2012.shp', append = FALSE)
+st_write(all_pts_lc_col, 'data/occ_pts/all_pts_lc_col_0605_all.shp', append = FALSE)
 # ================= 4. Merge and format data ==================
 #all_pts_lc_col <- st_read('data/occ_pts/all_pts_lc_col_0605_2012.shp')
 
 # merge all_pts_lc_col with df_pref_sp
-all_pts_lc_col_pref <- merge(all_pts_lc_col, df_pref_sp, by.x = 'scntfcN', by.y = 'name', all.x = TRUE)
+spp_field <- ifelse('scntfcN' %in% colnames(all_pts_lc_col), 'scntfcN', 'scientificName')
+all_pts_lc_col_pref <- merge(all_pts_lc_col, df_pref_sp, by.x = spp_field, by.y = 'name', all.x = TRUE)
 # remove geogmetry of all_pts_lc_col_pref
 df_all_info <- all_pts_lc_col_pref
 # Add longitude and latitude columns from geometry
@@ -327,19 +329,19 @@ df_all_info$longitude <- coords[,1]
 df_all_info$latitude <- coords[,2]
 
 df_all_info$geometry <- NULL
-write.csv(df_all_info, 'data/occ_pts/allinfo_ideam_coords_2012_0605.csv')
+write.csv(df_all_info, 'data/occ_pts/allinfo_ideam_coords_all_0605.csv')
 
 gc()
 
 # ================= 5. Check problematic habitat types ==================
-df <- read.csv('data/occ_pts/allinfo_ideam_coords_2012_0605.csv')
+df <- read.csv('data/occ_pts/allinfo_ideam_coords_all_0605.csv')
 df[is.na(df)] = 0
 
 cols_remove <- c('X', 'occ_ID', 'sorc_fl', 'taxa', 'leyenda_num','nivel_3_num', 'nivel_2_num', 'nivel_1_num', 'finalYear', 'longitude', 'latitude', 'lynd_nm','nvl_1_n', 'nvl_3_n', 'nvl_2_n', 'finalYr', 'eventYr', 'year', 'id')
 # get how many spp per hab pref
 head(df)
 df_spp_hab <- df %>% select(-any_of(cols_remove)) %>% unique()
-info_spp_hab <- as.data.frame(colSums(df_spp_hab %>% select(-scntfcN)))
+info_spp_hab <- as.data.frame(colSums(df_spp_hab %>% select(-any_of(c('scntfcN', 'scientificName')))))
 
 
 getInfo <- function(habitat_code){
@@ -347,7 +349,7 @@ getInfo <- function(habitat_code){
   # drop the columns that are not needed
   thisdf <- thisdf[,-which(names(thisdf) %in% c(cols_remove, habitat_code))]
   
-  thisinfo <- as.data.frame(colSums(thisdf %>% select(-scntfcN)))
+  thisinfo <- as.data.frame(colSums(thisdf %>% select(-any_of(c('scntfcN','scientificName')))))
   colnames(thisinfo) <- c('freq')
   rownames(thisinfo) <- seq(1, nrow(thisinfo), 1)
   thisinfo$hab_type <- colnames(thisdf)[-1]
@@ -363,7 +365,7 @@ checkSpecialist <- function(habitat_code){
   thisdf <- thisdf[,-which(names(thisdf) %in% c(cols_remove, habitat_code))]
   
   thisinfo <- getInfo(habitat_code)
-  thisdf_0 <- thisdf %>% filter(rowSums(thisdf %>% select(-scntfcN))==0)
+  thisdf_0 <- thisdf %>% filter(rowSums(thisdf %>% select(-any_of(c('scntfcN','scientificName'))))==0)
   
   print(nrow(thisdf_0))
   return(nrow(thisdf_0))
@@ -381,7 +383,7 @@ for(i in 1:nrow(habitat_info_sp)){
 
 
 
-write.csv(habitat_info_sp, 'results/habitat_info_specialist_2012onwards.csv')
+write.csv(habitat_info_sp, 'results/habitat_info_specialist_all_0605.csv')
 
 # rocky areas
 info_6 <- getInfo('hab_6')

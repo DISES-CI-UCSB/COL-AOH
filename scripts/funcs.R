@@ -98,7 +98,7 @@ create_unbalanced_splits <- function(lc_dataset, df_all_info, lc_code, seed=226)
 }
 
 
-
+# lc_dataset, df, lc_code, seed
 create_balanced_splits <- function(lc_dataset, df_all_info, lc_code, 
                                    seed = 226) {
   set.seed(seed)  # set seed at the start
