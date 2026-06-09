@@ -135,6 +135,7 @@ run_analysis <- function(
   # Export necessary data and functions to cluster
   clusterExport(cl, c("habitat_info1", "ideam_lc_info", "cgls_lc_info", 
                       "get_a_single_row", "create_balanced_splits", 
+                      "create_splits_replace",
                       "build_evaluate_model", "get_odds_ratios_row"))
   
   # Load required packages and define functions on cluster
@@ -259,6 +260,7 @@ run_analysis <- function(
   
   # Function to run a single iteration with a specific seed
   run_single_iteration <- function(seed, df_all_info, df_basic_info, colname_dataset, balance_specialist_generalist, modtype) {
+    cat(seed)
     # seed, df_all_info, df_basic_info, colname_dataset, balance_specialist_generalist
     tryCatch({
       # Balance specialist vs non-specialist within each taxa for this iteration
@@ -438,9 +440,10 @@ run_analysis <- function(
   cat("Running", n_iterations, "iterations in parallel...\n")
   
   iteration_results <- parLapply(cl, 1:n_iterations, function(seed) {
-    run_single_iteration(seed, df_all_info, df_basic_info, colname_dataset, balance_specialist_generalist)
+    run_single_iteration(seed, df_all_info, df_basic_info, colname_dataset, balance_specialist_generalist, modtype)
   })
   
+  cat("doing good")
   # Stop cluster
   stopCluster(cl)
   
@@ -502,20 +505,20 @@ run_analysis <- function(
 }
 
 # ================== Run =====================
-dft_folder <- "results/aoh_results_randomCI_5gen_firth_2012_2022_bal_keepaa_spthi"
+dft_folder <- "results/7gen_glm_pval_oob_2012_2022_bal_keepaa_spthi"
 if (!dir.exists(dft_folder)) {
   dir.create(dft_folder, recursive = TRUE)
 }
 
 # Example run with 1000 parallel iterations
 example_result <- run_analysis(
-  num_generalist = 5,
+  num_generalist = 7,
   d_near = 0,
   random_seed = 2025,  # Base seed (not used for iterations)
   balance_specialist_generalist = 1,
   remove_desert_rocky_aa = FALSE,  # Set to TRUE to remove desert and rocky habitats
   save_results = TRUE,
-  modtype = 'firth',
+  modtype = 'glm',
   dft_folder = dft_folder,
   n_cores = NULL  # Will use detectCores() - 3
 )
