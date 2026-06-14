@@ -24,7 +24,6 @@ analysis_cols <- c('scientificName', 'decimalLatitude', 'decimalLongitude',
                    'year', 'taxa', 'eventYear')
 
 # ================= 0. Read in and clean occurrence points ==================
-# should also compare with the formatted records to be consistent
 ## -------------- amphibians ---------
 dfanf <- read.csv('data/raw_occ_pts/anfibios_raw_pts.csv') %>% select(all_of(col_to_keep))
 length(unique(dfanf$scientificName))
@@ -334,15 +333,104 @@ write.csv(df_all_info, 'data/occ_pts/allinfo_ideam_coords_all_0605.csv')
 gc()
 
 # ================= 5. Check problematic habitat types ==================
-df <- read.csv('data/occ_pts/allinfo_ideam_coords_all_0605.csv')
-df[is.na(df)] = 0
+df <- read.csv('data/occ_pts/allinfo_ideam_coords_2012_0605.csv') %>% drop_na()
 
-cols_remove <- c('X', 'occ_ID', 'sorc_fl', 'taxa', 'leyenda_num','nivel_3_num', 'nivel_2_num', 'nivel_1_num', 'finalYear', 'longitude', 'latitude', 'lynd_nm','nvl_1_n', 'nvl_3_n', 'nvl_2_n', 'finalYr', 'eventYr', 'year', 'id')
-# get how many spp per hab pref
+cols_remove <- c('X', 'occ_ID', 'sorc_fl', 'taxa', 'leyenda_num','nivel_3_num', 'nivel_2_num', 'nivel_1_num', 'finalYear', 'longitude', 'latitude', 'lynd_nm','nvl_1_n', 'nvl_3_n', 'nvl_2_n', 'finalYr', 'eventYr', 'year', 'id', 'eventYear')
+## --------------- get how many species per hab pref ---------------
 head(df)
 df_spp_hab <- df %>% select(-any_of(cols_remove)) %>% unique()
 info_spp_hab <- as.data.frame(colSums(df_spp_hab %>% select(-any_of(c('scntfcN', 'scientificName')))))
+colnames(info_spp_hab) <- 'N_speices'
+info_spp_hab$hab_code <- rownames(info_spp_hab)
+rownames(info_spp_hab) <- 1:nrow(info_spp_hab)
+info_spp_hab <- merge(info_spp_hab, habitat_info, by.x='hab_code', by.y='habitat_code')
+## --------------- get how many data per hab pref ---------------
+df_N_hab <- as.data.frame(colSums(df %>% select(starts_with('hab_')) %>% drop_na()))
+colnames(df_N_hab) <- 'N_occ'
+df_N_hab$hab_code <- rownames(df_N_hab)
+rownames(df_N_hab) <- 1:nrow(df_N_hab)
+df_N_hab <- merge(df_N_hab, habitat_info, by.x='hab_code', by.y='habitat_code')
 
+## --------------- get pt breakdown by habitat and landcover ----------------
+# 1. Aggregate and sum the habitat columns by your land cover groups
+heatmap_data <- df_all_info %>%
+  group_by(nvl_2_n) %>%
+  summarise(across(starts_with("hab_"), ~ sum(., na.rm = TRUE))) %>%
+  
+  # 2. Pivot the data to a long format ready for ggplot
+  pivot_longer(
+    cols = starts_with("hab_"), 
+    names_to = "Habitat_Variable", 
+    values_to = "Total_Sum"
+  ) %>% mutate(
+    lc_code = paste0('lc_', as.character(nvl_2_n))
+  ) %>% group_by(nvl_2_n) %>%
+  mutate(
+    Row_Total = sum(Total_Sum),
+    Percentage = ifelse(Row_Total==0, 0, (Total_Sum/Row_Total)*100),
+    Percentage = round(Percentage, 2)
+  ) %>% ungroup()
+
+heatmap_data <- merge(heatmap_data, habitat_info1, by.x='Habitat_Variable', by.y='habitat_code')
+heatmap_data <- merge(heatmap_data, ideam_lc_info, by.x='lc_code', by.y='ideam_lc_code')
+
+
+# 3. Create the ggplot heatmap
+ggplot(heatmap_data, aes(x = habitat_name, y = as.factor(ideam_lc_name), fill = Total_Sum)) +
+  geom_tile(color = "white", lwd = 0.5, linetype = 1) + 
+  
+  # Add the text labels to each cell
+  geom_text(
+    aes(label = Total_Sum), 
+    color = "white",       # Sets text color (change to "black" if using a light palette)
+    fontface = "bold", 
+    size = 3.5             # Adjust size to fit your grid perfectly
+  ) +
+  
+  scale_fill_viridis_c(name = "Total Count", option = "mako") + 
+  theme_minimal() +
+  labs(
+    title = "Habitat Column Density by Land Cover Class (nvl_2_n)",
+    x = "Habitat Variables",
+    y = "Land Cover Class (nvl_2_n)"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+
+# 3. Create the ggplot heatmap
+ggplot(heatmap_data, aes(x = habitat_name, y = as.factor(ideam_lc_name), fill = round(Percentage))) +
+  geom_tile(color = "white", lwd = 0.5, linetype = 1) + 
+  
+  # Add the text labels to each cell
+  geom_text(
+    aes(label = Percentage), 
+    color = "white",       # Sets text color (change to "black" if using a light palette)
+    fontface = "bold", 
+    size = 3.5             # Adjust size to fit your grid perfectly
+  ) +
+  
+  scale_fill_viridis_c(name = "Percentage", option = "mako") + 
+  theme_minimal() +
+  labs(
+    title = "Habitat Column Density by Land Cover Class (nvl_2_n)",
+    x = "Habitat",
+    y = "Land Cover Class (nvl_2_n)"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+
+
+## ------------------ other ---------------------
 
 getInfo <- function(habitat_code){
   thisdf <- df[df[habitat_code]==1,]
@@ -351,7 +439,7 @@ getInfo <- function(habitat_code){
   
   thisinfo <- as.data.frame(colSums(thisdf %>% select(-any_of(c('scntfcN','scientificName')))))
   colnames(thisinfo) <- c('freq')
-  rownames(thisinfo) <- seq(1, nrow(thisinfo), 1)
+  rownames(thisinfo) <- 1:nrow(thisinfo)
   thisinfo$hab_type <- colnames(thisdf)[-1]
   thisinfo <- merge(thisinfo, habitat_info, by.x = 'hab_type', by.y = 'habitat_code')
   thisinfo$perc <- thisinfo$freq/nrow(thisdf)
@@ -383,7 +471,7 @@ for(i in 1:nrow(habitat_info_sp)){
 
 
 
-write.csv(habitat_info_sp, 'results/habitat_info_specialist_all_0605.csv')
+write.csv(habitat_info_sp, 'results/habitat_info_specialist_2012_0605.csv')
 
 # rocky areas
 info_6 <- getInfo('hab_6')

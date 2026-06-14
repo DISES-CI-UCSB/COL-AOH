@@ -505,14 +505,14 @@ run_analysis <- function(
 }
 
 # ================== Run =====================
-dft_folder <- "results/7gen_glm_pval_oob_2012_2022_bal_keepaa_spthi"
+dft_folder <- "results/5gen_glm_pval_oob_2012_2022_bal_keepaa_spthi"
 if (!dir.exists(dft_folder)) {
   dir.create(dft_folder, recursive = TRUE)
 }
 
 # Example run with 1000 parallel iterations
 example_result <- run_analysis(
-  num_generalist = 7,
+  num_generalist = 5,
   d_near = 0,
   random_seed = 2025,  # Base seed (not used for iterations)
   balance_specialist_generalist = 1,
@@ -554,7 +554,14 @@ if (exists("example_result") && !is.null(example_result$all_results)) {
                                               extracted_data$land_covers, 
                                               extracted_data$habitats, 
                                               'cv')
-  
+  mean_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
+                                                extracted_data$land_covers, 
+                                                extracted_data$habitats, 
+                                                'mean')
+  med_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
+                                                extracted_data$land_covers, 
+                                                extracted_data$habitats, 
+                                                'median')
   
   # Save matrices
   write.csv(count_matrix, paste0(dft_folder, "/count_above_1_matrix.csv"))
@@ -562,6 +569,8 @@ if (exists("example_result") && !is.null(example_result$all_results)) {
   write.csv(ci_bounds_table, paste0(dft_folder, "/ci_bounds_table.csv"))
   write.csv(se_table, paste0(dft_folder, "/se_table.csv"))
   write.csv(cv_table, paste0(dft_folder, "/cv_table.csv"))
+  write.csv(mean_table, paste0(dft_folder, "/mean_table.csv"))
+  write.csv(med_table, paste0(dft_folder, "/median_table.csv"))
   
   # Create and save barplot
   ci_plot <- create_ci_barplot(ci_matrix, dft_folder)
