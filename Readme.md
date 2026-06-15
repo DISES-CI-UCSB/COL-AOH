@@ -22,8 +22,8 @@ This repository provides a workflow for generating Area of Habitat (AOH) maps fo
 
 Scripts should be run in numerical order:
 
-1. **`01_prepData.R`** - Prepares species occurrence data and matches with land cover classifications
-2. **`02_randomCI.R`** - Computes translation matrices using random sampling to convert IUCN habitat preferences to land cover classes
+1. **`01_prepDataRaw.R`** - Prepares species occurrence data and matches with land cover classifications
+2. **`02_randomCI.R`** - Computes translation matrices using random resampling to convert IUCN habitat preferences to land cover classes
 3. **`03_createHabitatLayer.R`** - Creates habitat layers from land cover data
 4. **`04_createSpeciesAOH.R`** - Generates AOH maps (with uncertainty) for each species using range maps, habitat preferences, and elevation data
 5. **`05_validation.R`** - Validates AOH maps against occurrence data
@@ -32,6 +32,7 @@ Scripts should be run in numerical order:
 ## Additional Scripts
 
 - **`funcs.R`** - Helper functions used across scripts
+- **`postProcFuncs.R`** - Helper functions to post process matrix runs
 - **`info.R`** - Habitat and land cover classification metadata
 - **`SensitivityViz.R`** - Visualization scripts for sensitivity analysis
 - **`combine_csv.py`** - Python utility for combining CSV files
@@ -47,4 +48,4 @@ Python packages: Standard libraries (for utility scripts)
 
 1. Ensure all required data files are in the `data/` directory
 2. Update file paths in scripts as needed
-3. Run scripts sequentially from `01_prepData.R` through `06_lv1Matrix.R`
+3. Run scripts sequentially from `01_prepDataRaw.R` through `06_lv1Matrix.R`

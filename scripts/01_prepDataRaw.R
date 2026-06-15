@@ -313,7 +313,7 @@ if(inherits(all_pts_lc, "try-error")) {
 # keep only rows with non na leyenda_num
 all_pts_lc_col <- all_pts_lc %>% filter(!is.na(leyenda_num))
 # export all_pts_lc_col
-st_write(all_pts_lc_col, 'data/occ_pts/all_pts_lc_col_0605_all.shp', append = FALSE)
+st_write(all_pts_lc_col, 'data/occ_pts/all_pts_lc_col_0605_2012.shp', append = FALSE)
 # ================= 4. Merge and format data ==================
 #all_pts_lc_col <- st_read('data/occ_pts/all_pts_lc_col_0605_2012.shp')
 
@@ -328,12 +328,17 @@ df_all_info$longitude <- coords[,1]
 df_all_info$latitude <- coords[,2]
 
 df_all_info$geometry <- NULL
-write.csv(df_all_info, 'data/occ_pts/allinfo_ideam_coords_all_0605.csv')
+write.csv(df_all_info, 'data/occ_pts/allinfo_ideam_coords_2012_0605.csv')
 
 gc()
 
 # ================= 5. Check problematic habitat types ==================
 df <- read.csv('data/occ_pts/allinfo_ideam_coords_2012_0605.csv') %>% drop_na()
+df <- df %>% mutate(
+  nvl_2_n = gsub('.', '', nvl_2_n, fixed = TRUE)
+)
+
+unique(df$nvl_2_n)
 
 cols_remove <- c('X', 'occ_ID', 'sorc_fl', 'taxa', 'leyenda_num','nivel_3_num', 'nivel_2_num', 'nivel_1_num', 'finalYear', 'longitude', 'latitude', 'lynd_nm','nvl_1_n', 'nvl_3_n', 'nvl_2_n', 'finalYr', 'eventYr', 'year', 'id', 'eventYear')
 ## --------------- get how many species per hab pref ---------------
@@ -353,7 +358,7 @@ df_N_hab <- merge(df_N_hab, habitat_info, by.x='hab_code', by.y='habitat_code')
 
 ## --------------- get pt breakdown by habitat and landcover ----------------
 # 1. Aggregate and sum the habitat columns by your land cover groups
-heatmap_data <- df_all_info %>%
+heatmap_data <- df %>%
   group_by(nvl_2_n) %>%
   summarise(across(starts_with("hab_"), ~ sum(., na.rm = TRUE))) %>%
   
@@ -429,6 +434,11 @@ ggplot(heatmap_data, aes(x = habitat_name, y = as.factor(ideam_lc_name), fill = 
   )
 
 
+habitats_with_all_low_df <- heatmap_data %>% 
+  group_by(Habitat_Variable) %>% 
+  summarise(maxperc = max(Percentage)) %>% filter(maxperc<1)
+
+habitats_with_all_low_df <- unique(habitats_with_all_low_df$Habitat_Variable)
 
 ## ------------------ other ---------------------
 
@@ -471,22 +481,4 @@ for(i in 1:nrow(habitat_info_sp)){
 
 
 
-write.csv(habitat_info_sp, 'results/habitat_info_specialist_2012_0605.csv')
-
-# rocky areas
-info_6 <- getInfo('hab_6')
-ggplot(info_6, aes(x=habitat_name, y=freq)) +
-  geom_bar(stat='identity') +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
-# artificial aquatic
-info_15 <- getInfo('hab_15')
-ggplot(info_15, aes(x=habitat_name, y=freq)) +
-  geom_bar(stat='identity') +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
-# desert
-info_8 <- getInfo('hab_8')
-ggplot(info_8, aes(x=habitat_name, y=freq)) +
-  geom_bar(stat='identity') +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+write.csv(habitat_info_sp, 'results/habitat_info_specialist_2012onwards.csv')

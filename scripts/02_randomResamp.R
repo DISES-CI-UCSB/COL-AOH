@@ -1,22 +1,22 @@
-# Parameterized version of 02_computeMatrix.R for single matrix generation
-# with random sampling and statistics
+# Matrix calculation
+# with random resampling and statistics
 # Author: Wenxin Yang
 # Date: July, 2025
-# Revised: June, 2026
-# THIS IS THE SCRIPT I ENDED UP USING FOR THE MANUSCRIPT (submitted version)
+# Revised from 02_randomCI.R in: June, 2026
+# THIS IS THE SCRIPT I ENDED UP USING FOR THE MANUSCRIPT (revision June)
 
 # ================== Function to run single matrix analysis with parameters =====================
 run_analysis <- function(
     # core parameters
   num_generalist = 7,
-  d_near = 0,
   random_seed = 2025,
   # data filtering parameters
   balance_specialist_generalist = 1, # balance specialist vs non specialist by taxa
-  remove_desert_rocky_aa = FALSE, # remove desert (hab_6), rocky (hab_8), and artificial-aquatic (hab_15) habitats
+  remove_habitats = FALSE, # c("hab_6", "hab_8") for removing desert (hab_6), rocky (hab_8)
   # output parameters
   output_suffix = paste0("_", format(Sys.Date(), "%m%d"), "_", format(Sys.Date(), "%Y")),
   save_results = TRUE,
+  resampling_approach = 'bootstrap', # bootstrap or subsampling
   dft_folder = "aoh_results_randomCI",
   modtype = "glm", # glm or firth
   # parallel processing parameters
@@ -67,13 +67,6 @@ run_analysis <- function(
   # remove habitat codes not included in the analysis per the original paper
   df_all_info <- df_all %>% select(-all_of(drop_cols))
   
-  # remove those near boundary
-  if('dst_t_b' %in% colnames(df_all_info)){
-    summary(df_all_info$dst_t_b)
-    df_all_info <- df_all_info %>% filter(dst_t_b > d_near) %>% select(-dst_t_b)
-  }
-
-  
   # merge several artificial habitat types
   df_all_info <- df_all_info %>% mutate(
     hab_14.12 = ifelse(hab_14.1+hab_14.2 >0, 1, 0),
@@ -85,10 +78,10 @@ run_analysis <- function(
   df_all_info <- df_all_info %>% select(-all_of(c('hab_14.1', 'hab_14.2', 'hab_14.3', 'hab_14.4', 'hab_14.5', 'hab_14.6')))
   
   # ======= 2.3 Remove some habitats if requested =======
-  if (remove_desert_rocky_aa) {
-    df_all_info <- df_all_info %>% select(-all_of(c('hab_6', 'hab_8', 'hab_15')))
+  if (remove_habitats!=FALSE) {
+    df_all_info <- df_all_info %>% select(-all_of(remove_habitats))
     # Update colname_dataset to exclude these habitats
-    colname_dataset <- c("lc_code", "n_samples", habitat_info1$habitat_code[!habitat_info1$habitat_code %in% c('hab_6', 'hab_8', 'hab_15')], "auc")
+    colname_dataset <- c("lc_code", "n_samples", habitat_info1$habitat_code[!habitat_info1$habitat_code %in% remove_habitats], "auc")
   } else {
     colname_dataset <- c("lc_code", "n_samples", habitat_info1$habitat_code, "auc")
   }
@@ -146,9 +139,9 @@ run_analysis <- function(
     library(stringr)
     
     # Define generate_matrix function on cluster
-  generate_matrix <- function(dat, landcover_colname, landcover_dataset, seed, cols, modtype){
-    # dat, 'nvl_2_n', 'ideam', seed, colname_dataset
-    tryCatch({
+    generate_matrix <- function(dat, landcover_colname, landcover_dataset, seed, cols, modtype){
+      # dat, 'nvl_2_n', 'ideam', seed, colname_dataset
+      tryCatch({
         # Debug: check the data structure
         if (!landcover_colname %in% colnames(dat)) {
           stop("Land cover column '", landcover_colname, "' not found in data")
@@ -170,92 +163,95 @@ run_analysis <- function(
         }
         
         info_list <- lapply(unique_landcovers,
-                          function(x) {
-                            tryCatch({
-                              get_a_single_row(dat, x, seed = seed, lc_dataset = landcover_dataset, modtype=modtype, filterpval=0)
-                            }, error = function(e) {
-                              cat("Error processing land cover", x, ":", e$message, "\n")
-                              # Return empty row with correct structure
-                              empty_row <- data.frame(matrix(0, nrow = 1, ncol = length(cols)))
-                              colnames(empty_row) <- cols
-                              empty_row$lc_code <- paste0("lc_", x)
-                              empty_row$auc <- 0.5
-                              empty_row$n_samples <- 0
-                              return(empty_row)
+                            function(x) {
+                              tryCatch({
+                                get_a_single_row(dat, x, seed = seed, 
+                                                 lc_dataset = landcover_dataset, 
+                                                 modtype=modtype, filterpval=0,
+                                                 resampling_approach=resampling_approach)
+                              }, error = function(e) {
+                                cat("Error processing land cover", x, ":", e$message, "\n")
+                                # Return empty row with correct structure
+                                empty_row <- data.frame(matrix(0, nrow = 1, ncol = length(cols)))
+                                colnames(empty_row) <- cols
+                                empty_row$lc_code <- paste0("lc_", x)
+                                empty_row$auc <- 0.5
+                                empty_row$n_samples <- 0
+                                return(empty_row)
+                              })
                             })
-                          })
-      
-      # Filter out NULL results and combine
-      info_list <- info_list[!sapply(info_list, is.null)]
-      
-      if (length(info_list) == 0) {
-        # If no valid results, return empty matrix
+        
+        # Filter out NULL results and combine
+        info_list <- info_list[!sapply(info_list, is.null)]
+        
+        if (length(info_list) == 0) {
+          # If no valid results, return empty matrix
+          empty_matrix <- data.frame(matrix(0, nrow = 0, ncol = length(cols)))
+          colnames(empty_matrix) <- cols
+          return(empty_matrix)
+        }
+        
+        info_list <- do.call(rbind, info_list) %>% select(all_of(cols))
+        # reset row index
+        rownames(info_list) <- NULL
+        
+        # change column names that start with "hab_" to the habitat names in habitat_info
+        colnames(info_list) <- sapply(colnames(info_list), function(x){
+          if (x %in% habitat_info1$habitat_code) {
+            return(habitat_info1$habitat_name[match(x, habitat_info1$habitat_code)])
+          } else {
+            return(x)
+          }
+        })
+        
+        # change lc_code values to the land cover names in ideam_lc_info
+        info_list$lc_code <- sapply(info_list$lc_code, function(x) {
+          if(landcover_dataset=='ideam'){
+            return(ideam_lc_info$ideam_lc_name[match(x, ideam_lc_info$ideam_lc_code)])
+          } else if(landcover_dataset=='cgls'){
+            return(cgls_lc_info$cgls_lc_name[match(x, cgls_lc_info$cgls_lc_code)])
+          }
+        })
+        
+        # rename lc_code to "land cover"
+        colnames(info_list)[colnames(info_list)=='lc_code'] <- 'Land Cover'
+        
+        return(info_list)
+      }, error = function(e) {
+        cat("Error in generate_matrix:", e$message, "\n")
+        # Return empty matrix with correct structure
         empty_matrix <- data.frame(matrix(0, nrow = 0, ncol = length(cols)))
         colnames(empty_matrix) <- cols
         return(empty_matrix)
-      }
-      
-      info_list <- do.call(rbind, info_list) %>% select(all_of(cols))
-      # reset row index
-      rownames(info_list) <- NULL
-      
-      # change column names that start with "hab_" to the habitat names in habitat_info
-      colnames(info_list) <- sapply(colnames(info_list), function(x){
-        if (x %in% habitat_info1$habitat_code) {
-          return(habitat_info1$habitat_name[match(x, habitat_info1$habitat_code)])
-        } else {
-          return(x)
-        }
       })
-      
-      # change lc_code values to the land cover names in ideam_lc_info
-      info_list$lc_code <- sapply(info_list$lc_code, function(x) {
-        if(landcover_dataset=='ideam'){
-          return(ideam_lc_info$ideam_lc_name[match(x, ideam_lc_info$ideam_lc_code)])
-        } else if(landcover_dataset=='cgls'){
-          return(cgls_lc_info$cgls_lc_name[match(x, cgls_lc_info$cgls_lc_code)])
-        }
-      })
-      
-      # rename lc_code to "land cover"
-      colnames(info_list)[colnames(info_list)=='lc_code'] <- 'Land Cover'
-      
-      return(info_list)
-    }, error = function(e) {
-      cat("Error in generate_matrix:", e$message, "\n")
-      # Return empty matrix with correct structure
-      empty_matrix <- data.frame(matrix(0, nrow = 0, ncol = length(cols)))
-      colnames(empty_matrix) <- cols
-      return(empty_matrix)
-    })
-  }
-  
-    # Define getHabAssoc function on cluster
-  getHabAssoc <- function(df, seed, landcover_dataset){
-    ## determine what is a good land cover - habitat pair to keep
-    ## using the Lumbierres et al. thresholds
-    habitat_associations <- data.frame(
-      land_cover = df$`Land Cover`,
-      pos_odds_habitats = sapply(1:nrow(df), function(i) {
-        # Get habitat columns (exclude irrelevant columns)
-        habitat_cols <- colnames(df)[!colnames(df) %in% c("Land Cover", "n_samples", "auc")]
-        # Get odds ratios for this land cover type
-        odds_ratios <- as.numeric(df[i, habitat_cols])
-        # Get habitats with positive odds ratios
-        pos_odds <- habitat_cols[odds_ratios > 1]
-        paste(pos_odds, collapse=", ")
-      })
-    )
-    habitat_associations$seed_val <- seed
-    habitat_associations$dataset <- landcover_dataset
-    # add auc
-    habitat_associations$auc <- df$auc
-    # add n_samples
-    habitat_associations$n_samples <- df$n_samples
+    }
     
-    return(habitat_associations)
-  }
-  
+    # Define getHabAssoc function on cluster
+    getHabAssoc <- function(df, seed, landcover_dataset){
+      ## determine what is a good land cover - habitat pair to keep
+      ## using the Lumbierres et al. thresholds
+      habitat_associations <- data.frame(
+        land_cover = df$`Land Cover`,
+        pos_odds_habitats = sapply(1:nrow(df), function(i) {
+          # Get habitat columns (exclude irrelevant columns)
+          habitat_cols <- colnames(df)[!colnames(df) %in% c("Land Cover", "n_samples", "auc")]
+          # Get odds ratios for this land cover type
+          odds_ratios <- as.numeric(df[i, habitat_cols])
+          # Get habitats with positive odds ratios
+          pos_odds <- habitat_cols[odds_ratios > 1]
+          paste(pos_odds, collapse=", ")
+        })
+      )
+      habitat_associations$seed_val <- seed
+      habitat_associations$dataset <- landcover_dataset
+      # add auc
+      habitat_associations$auc <- df$auc
+      # add n_samples
+      habitat_associations$n_samples <- df$n_samples
+      
+      return(habitat_associations)
+    }
+    
   })
   
   # Function to run a single iteration with a specific seed
@@ -293,7 +289,7 @@ run_analysis <- function(
       # Generate matrix for this iteration
       dat <- balanced_rec
       
-      # Debug: check data structure
+      # Make sure data structure is okay
       if (nrow(dat) == 0) {
         stop("No data available for iteration with seed ", seed)
       }
@@ -310,7 +306,7 @@ run_analysis <- function(
       if (length(all_values) == 0) {
         # If no positive values, create empty results
         this_tert <- data.frame(
-          min = NA,`one-third` = NA,`two-third` = NA, max = NA,seed = seed
+          min = NA,`one-third` = NA,`two-third` = NA, max = NA, seed = seed
         )
         tmp <- data.frame(
           land_cover = character(),
@@ -457,8 +453,7 @@ run_analysis <- function(
     # Create filename with parameters
     filename_base <- paste0(dft_folder, "/btst_ideam_randomCI_", 
                             "gen", num_generalist, "_",
-                            ifelse(d_near > 0, paste0("near", d_near, "_"), ""),
-                            ifelse(remove_desert_rocky_aa, "_noDesRockAA", ""),
+                            ifelse(remove_habitats, "rmhab", ""),
                             ifelse(!balance_specialist_generalist, "_nobal", ""),
                             output_suffix)
     
@@ -470,7 +465,7 @@ run_analysis <- function(
     btst_ideam_pos <- selectPairs(btst_ideam, 'positive')
     write.csv(btst_ideam_pos, paste0(filename_base, "_pos.csv"))
     
-
+    
     
     # Save all results as a single RDS file
     all_results <- list(
@@ -480,9 +475,8 @@ run_analysis <- function(
       raw_odds_ratios = raw_odds_all,        # Raw odds ratios for CI calculations
       parameters = list(
         num_generalist = num_generalist,
-        d_near = d_near,
         balance_specialist_generalist = balance_specialist_generalist,
-        remove_desert_rocky_aa = remove_desert_rocky_aa,
+        remove_habitats = remove_habitats,
         n_iterations = n_iterations,
         n_cores_used = n_cores
       )
@@ -504,7 +498,80 @@ run_analysis <- function(
   ))
 }
 
+
+# ======================= Analyze & Visualize Results =========================
+save_results <- function(example_results){
+  if (!is.null(example_result$all_results)) {
+    cat("\n=== Analyzing Results ===\n")
+    
+    # Extract data
+    extracted_data <- extract_habitat_data(example_result$all_results$iteration_results)
+    
+    # Create matrices
+    count_matrix <- create_count_matrix(extracted_data$all_hab_data, 
+                                        extracted_data$land_covers, 
+                                        extracted_data$habitats)
+    
+    ci_matrix <- create_ci_matrix(extracted_data$all_raw_odds, 
+                                  extracted_data$land_covers, 
+                                  extracted_data$habitats)
+    
+    # Create CI bounds table
+    ci_bounds_table <- create_ci_bounds_table(extracted_data$all_raw_odds, 
+                                              extracted_data$land_covers, 
+                                              extracted_data$habitats)
+    
+    se_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
+                                                extracted_data$land_covers, 
+                                                extracted_data$habitats, 
+                                                'bootstrap_se')
+    cv_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
+                                                extracted_data$land_covers, 
+                                                extracted_data$habitats, 
+                                                'cv')
+    mean_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
+                                                  extracted_data$land_covers, 
+                                                  extracted_data$habitats, 
+                                                  'mean')
+    med_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
+                                                 extracted_data$land_covers, 
+                                                 extracted_data$habitats, 
+                                                 'median')
+    
+    # Save matrices
+    write.csv(count_matrix, paste0(dft_folder, "/count_above_1_matrix.csv"))
+    write.csv(ci_matrix, paste0(dft_folder, "/ci_width_matrix.csv"))
+    write.csv(ci_bounds_table, paste0(dft_folder, "/ci_bounds_table.csv"))
+    write.csv(se_table, paste0(dft_folder, "/se_table.csv"))
+    write.csv(cv_table, paste0(dft_folder, "/cv_table.csv"))
+    write.csv(mean_table, paste0(dft_folder, "/mean_table.csv"))
+    write.csv(med_table, paste0(dft_folder, "/median_table.csv"))
+    
+    # Create and save barplot
+    #ci_plot <- create_ci_barplot(ci_matrix, dft_folder)
+    
+    # Create and save CI bounds heatmap
+    #ci_heatmap <- create_ci_bounds_heatmap(extracted_data$all_raw_odds, 
+    #                                       extracted_data$land_covers, 
+    #                                       extracted_data$habitats, 
+    #                                       dft_folder)
+    
+    # Create and save count heatmap
+    count_heatmap <- create_count_heatmap(count_matrix, dft_folder)
+    ggsave(paste0(dft_folder, "/count_heatmap.png"), count_heatmap, width=10, height=8)
+    
+  } else {
+    cat("\nNo results found to analyze. Make sure to run the analysis first.\n")
+  }
+}
+
+
+gc()
+
+
 # ================== Run =====================
+
+
 dft_folder <- "results/5gen_glm_pval_oob_2012_2022_bal_keepaa_spthi"
 if (!dir.exists(dft_folder)) {
   dir.create(dft_folder, recursive = TRUE)
@@ -513,79 +580,13 @@ if (!dir.exists(dft_folder)) {
 # Example run with 1000 parallel iterations
 example_result <- run_analysis(
   num_generalist = 5,
-  d_near = 0,
   random_seed = 2025,  # Base seed (not used for iterations)
   balance_specialist_generalist = 1,
-  remove_desert_rocky_aa = FALSE,  # Set to TRUE to remove desert and rocky habitats
+  remove_habitats = c('hab_6', 'hab_8'),  # Set to TRUE to remove desert and rocky habitats
   save_results = TRUE,
   modtype = 'glm',
   dft_folder = dft_folder,
   n_cores = NULL  # Will use detectCores() - 3
 )
 
-
-
-# ======================= Analyze & Visualize Results =========================
-if (exists("example_result") && !is.null(example_result$all_results)) {
-  cat("\n=== Analyzing Results ===\n")
-  
-  # Extract data
-  extracted_data <- extract_habitat_data(example_result$all_results$iteration_results)
-  
-  # Create matrices
-  count_matrix <- create_count_matrix(extracted_data$all_hab_data, 
-                                     extracted_data$land_covers, 
-                                     extracted_data$habitats)
-  
-  ci_matrix <- create_ci_matrix(extracted_data$all_raw_odds, 
-                               extracted_data$land_covers, 
-                               extracted_data$habitats)
-  
-  # Create CI bounds table
-  ci_bounds_table <- create_ci_bounds_table(extracted_data$all_raw_odds, 
-                                           extracted_data$land_covers, 
-                                           extracted_data$habitats)
-  
-  se_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
-                                              extracted_data$land_covers, 
-                                              extracted_data$habitats, 
-                                              'bootstrap_se')
-  cv_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
-                                              extracted_data$land_covers, 
-                                              extracted_data$habitats, 
-                                              'cv')
-  mean_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
-                                                extracted_data$land_covers, 
-                                                extracted_data$habitats, 
-                                                'mean')
-  med_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
-                                                extracted_data$land_covers, 
-                                                extracted_data$habitats, 
-                                                'median')
-  
-  # Save matrices
-  write.csv(count_matrix, paste0(dft_folder, "/count_above_1_matrix.csv"))
-  write.csv(ci_matrix, paste0(dft_folder, "/ci_width_matrix.csv"))
-  write.csv(ci_bounds_table, paste0(dft_folder, "/ci_bounds_table.csv"))
-  write.csv(se_table, paste0(dft_folder, "/se_table.csv"))
-  write.csv(cv_table, paste0(dft_folder, "/cv_table.csv"))
-  write.csv(mean_table, paste0(dft_folder, "/mean_table.csv"))
-  write.csv(med_table, paste0(dft_folder, "/median_table.csv"))
-  
-  # Create and save barplot
-  ci_plot <- create_ci_barplot(ci_matrix, dft_folder)
-  
-  # Create and save CI bounds heatmap
-  ci_heatmap <- create_ci_bounds_heatmap(extracted_data$all_raw_odds, 
-                                        extracted_data$land_covers, 
-                                        extracted_data$habitats, 
-                                        dft_folder)
-  
-  # Create and save count heatmap
-  count_heatmap <- create_count_heatmap(count_matrix, dft_folder)
-  
-} else {
-  cat("\nNo results found to analyze. Make sure to run the analysis first.\n")
-}
-
-gc()
+save_results(example_results)

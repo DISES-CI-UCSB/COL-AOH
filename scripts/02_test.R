@@ -3,7 +3,7 @@
 # Author: Wenxin Yang
 # Date: July, 2025
 # Revised: June, 2026
-# THIS IS THE SCRIPT I ENDED UP USING FOR THE MANUSCRIPT (submitted version)
+# THIS IS THE SCRIPT I ENDED UP USING FOR THE MANUSCRIPT
 
 # ================== Function to run single matrix analysis with parameters =====================
 run_analysis <- function(
@@ -72,7 +72,7 @@ run_analysis <- function(
     summary(df_all_info$dst_t_b)
     df_all_info <- df_all_info %>% filter(dst_t_b > d_near) %>% select(-dst_t_b)
   }
-
+  
   
   # merge several artificial habitat types
   df_all_info <- df_all_info %>% mutate(
@@ -120,56 +120,30 @@ run_analysis <- function(
   
   
   ## ========= 4.1 Generate 1000 matrices in parallel =======
-  cat("Setting up parallel processing for 1000 iterations...\n")
-  
-  # Set up parallel processing
-  if (is.null(n_cores)) {
-    n_cores <- detectCores() - 3  # Leave three cores free
-  }
-  n_cores <- min(n_cores, detectCores() - 1, 1000)  # Don't use more cores than available or needed
-  
-  cat("Using", n_cores, "cores for parallel processing\n")
-  # Create cluster
-  cl <- makeCluster(n_cores)
-  
-  # Export necessary data and functions to cluster
-  clusterExport(cl, c("habitat_info1", "ideam_lc_info", "cgls_lc_info", 
-                      "get_a_single_row", "create_balanced_splits", 
-                      "create_splits_replace",
-                      "build_evaluate_model", "get_odds_ratios_row"))
-  
-  # Load required packages and define functions on cluster
-  clusterEvalQ(cl, {
-    library(dplyr)
-    library(tidyr)
-    library(pROC)
-    library(stringr)
-    
-    # Define generate_matrix function on cluster
   generate_matrix <- function(dat, landcover_colname, landcover_dataset, seed, cols, modtype){
     # dat, 'nvl_2_n', 'ideam', seed, colname_dataset
     tryCatch({
-        # Debug: check the data structure
-        if (!landcover_colname %in% colnames(dat)) {
-          stop("Land cover column '", landcover_colname, "' not found in data")
-        }
-        
-        # Get unique land cover values and ensure they are character
-        landcover_values <- dat[[landcover_colname]]
-        if (!is.character(landcover_values)) {
-          landcover_values <- as.character(landcover_values)
-        }
-        unique_landcovers <- unique(landcover_values)
-        
-        # Remove any NA or empty values
-        unique_landcovers <- unique_landcovers[!is.na(unique_landcovers) & unique_landcovers != ""]
-        #unique_landcovers <- as.numeric(unique_landcovers)
-        
-        if (length(unique_landcovers) == 0) {
-          stop("No valid land cover values found")
-        }
-        
-        info_list <- lapply(unique_landcovers,
+      # Debug: check the data structure
+      if (!landcover_colname %in% colnames(dat)) {
+        stop("Land cover column '", landcover_colname, "' not found in data")
+      }
+      
+      # Get unique land cover values and ensure they are character
+      landcover_values <- dat[[landcover_colname]]
+      if (!is.character(landcover_values)) {
+        landcover_values <- as.character(landcover_values)
+      }
+      unique_landcovers <- unique(landcover_values)
+      
+      # Remove any NA or empty values
+      unique_landcovers <- unique_landcovers[!is.na(unique_landcovers) & unique_landcovers != ""]
+      #unique_landcovers <- as.numeric(unique_landcovers)
+      
+      if (length(unique_landcovers) == 0) {
+        stop("No valid land cover values found")
+      }
+      
+      info_list <- lapply(unique_landcovers,
                           function(x) {
                             tryCatch({
                               get_a_single_row(dat, x, seed = seed, lc_dataset = landcover_dataset, modtype=modtype, filterpval=0)
@@ -229,8 +203,7 @@ run_analysis <- function(
       return(empty_matrix)
     })
   }
-  
-    # Define getHabAssoc function on cluster
+  # Define getHabAssoc function on cluster
   getHabAssoc <- function(df, seed, landcover_dataset){
     ## determine what is a good land cover - habitat pair to keep
     ## using the Lumbierres et al. thresholds
@@ -255,8 +228,6 @@ run_analysis <- function(
     
     return(habitat_associations)
   }
-  
-  })
   
   # Function to run a single iteration with a specific seed
   run_single_iteration <- function(seed, df_all_info, df_basic_info, colname_dataset, balance_specialist_generalist, modtype) {
@@ -439,13 +410,14 @@ run_analysis <- function(
   n_iterations <- 1000  # Start with 10 for testing, can increase to 1000 later
   cat("Running", n_iterations, "iterations in parallel...\n")
   
-  iteration_results <- parLapply(cl, 1:n_iterations, function(seed) {
-    run_single_iteration(seed, df_all_info, df_basic_info, colname_dataset, balance_specialist_generalist, modtype)
-  })
+  iteration_results <- c()
+  for(i in 1:n_iterations){
+    seed <- i
+    tmp <- run_single_iteration(seed, df_all_info, df_basic_info, colname_dataset, balance_specialist_generalist, modtype)
+    iteration_results <- append(iteration_results, tmp)
+  }
   
   cat("doing good")
-  # Stop cluster
-  stopCluster(cl)
   
   # Combine all results
   btst_ideam <- do.call(rbind, lapply(iteration_results, function(x) x$hab_assoc))
@@ -470,7 +442,7 @@ run_analysis <- function(
     btst_ideam_pos <- selectPairs(btst_ideam, 'positive')
     write.csv(btst_ideam_pos, paste0(filename_base, "_pos.csv"))
     
-
+    
     
     # Save all results as a single RDS file
     all_results <- list(
@@ -505,14 +477,14 @@ run_analysis <- function(
 }
 
 # ================== Run =====================
-dft_folder <- "results/5gen_glm_pval_oob_2012_2022_bal_keepaa_spthi"
+dft_folder <- "results/7gen_glm_pval_oob_2012_2022_bal_keepaa_spthi"
 if (!dir.exists(dft_folder)) {
   dir.create(dft_folder, recursive = TRUE)
 }
 
 # Example run with 1000 parallel iterations
 example_result <- run_analysis(
-  num_generalist = 5,
+  num_generalist = 7,
   d_near = 0,
   random_seed = 2025,  # Base seed (not used for iterations)
   balance_specialist_generalist = 1,
@@ -534,17 +506,17 @@ if (exists("example_result") && !is.null(example_result$all_results)) {
   
   # Create matrices
   count_matrix <- create_count_matrix(extracted_data$all_hab_data, 
-                                     extracted_data$land_covers, 
-                                     extracted_data$habitats)
+                                      extracted_data$land_covers, 
+                                      extracted_data$habitats)
   
   ci_matrix <- create_ci_matrix(extracted_data$all_raw_odds, 
-                               extracted_data$land_covers, 
-                               extracted_data$habitats)
+                                extracted_data$land_covers, 
+                                extracted_data$habitats)
   
   # Create CI bounds table
   ci_bounds_table <- create_ci_bounds_table(extracted_data$all_raw_odds, 
-                                           extracted_data$land_covers, 
-                                           extracted_data$habitats)
+                                            extracted_data$land_covers, 
+                                            extracted_data$habitats)
   
   se_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
                                               extracted_data$land_covers, 
@@ -554,14 +526,7 @@ if (exists("example_result") && !is.null(example_result$all_results)) {
                                               extracted_data$land_covers, 
                                               extracted_data$habitats, 
                                               'cv')
-  mean_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
-                                                extracted_data$land_covers, 
-                                                extracted_data$habitats, 
-                                                'mean')
-  med_table <- create_stability_metrics_tables(extracted_data$all_raw_odds, 
-                                                extracted_data$land_covers, 
-                                                extracted_data$habitats, 
-                                                'median')
+  
   
   # Save matrices
   write.csv(count_matrix, paste0(dft_folder, "/count_above_1_matrix.csv"))
@@ -569,17 +534,15 @@ if (exists("example_result") && !is.null(example_result$all_results)) {
   write.csv(ci_bounds_table, paste0(dft_folder, "/ci_bounds_table.csv"))
   write.csv(se_table, paste0(dft_folder, "/se_table.csv"))
   write.csv(cv_table, paste0(dft_folder, "/cv_table.csv"))
-  write.csv(mean_table, paste0(dft_folder, "/mean_table.csv"))
-  write.csv(med_table, paste0(dft_folder, "/median_table.csv"))
   
   # Create and save barplot
   ci_plot <- create_ci_barplot(ci_matrix, dft_folder)
   
   # Create and save CI bounds heatmap
   ci_heatmap <- create_ci_bounds_heatmap(extracted_data$all_raw_odds, 
-                                        extracted_data$land_covers, 
-                                        extracted_data$habitats, 
-                                        dft_folder)
+                                         extracted_data$land_covers, 
+                                         extracted_data$habitats, 
+                                         dft_folder)
   
   # Create and save count heatmap
   count_heatmap <- create_count_heatmap(count_matrix, dft_folder)
