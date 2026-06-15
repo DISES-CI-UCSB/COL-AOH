@@ -140,7 +140,7 @@ run_analysis <- function(
     library(stringr)
     
     # Define generate_matrix function on cluster
-    generate_matrix <- function(dat, landcover_colname, landcover_dataset, seed, cols, modtype){
+    generate_matrix <- function(dat, landcover_colname, landcover_dataset, seed, cols, modtype, resampling_approach){
       # dat, 'nvl_2_n', 'ideam', seed, colname_dataset
       tryCatch({
         # Debug: check the data structure
@@ -310,7 +310,7 @@ run_analysis <- function(
         stop("Land cover column 'nvl_2_n' not found in data for iteration with seed ", seed)
       }
       
-      this_ideam <- generate_matrix(dat, 'nvl_2_n', 'ideam', seed, colname_dataset, modtype)
+      this_ideam <- generate_matrix(dat, 'nvl_2_n', 'ideam', seed, colname_dataset, modtype, resampling_approach)
       
       all_values <- as.vector(unlist(this_ideam %>% select(-`Land Cover`, auc, n_samples)))
       all_values <- all_values[all_values > 1] # keep positive values
@@ -589,15 +589,24 @@ save_results <- function(example_result){
 
 
 # ================== Run =====================
-overall_folder <- 'results/glm_btst_2012_rmhab'
+overall_folder <- 'results/glm_subsamp_2012_keephab'
 if (!dir.exists(overall_folder)) {
   dir.create(overall_folder, recursive = TRUE)
 }
 
 for(i in c(5,6,7,8)){
   cat('Generalist spp has ', i, ' preferences\n')
+  resampling_approach = 'subsampling'
+  keephab = 1
+  
+  if(keephab == 1){
+    removehab <- NULL
+  } else {
+    removehab <- c('hab_6', 'hab_8')
+  }
+  
   # genN modtype resampling_approach year_spp_filter remove_habitat
-  dft_folder <- file.path(overall_folder, paste0('gen', i, '_glm_btst_2012_rmhab'))
+  dft_folder <- file.path(overall_folder, paste0('gen', i, '_glm_', resampling_approach, '_2012_keephab'))
   if (!dir.exists(dft_folder)) {
     dir.create(dft_folder, recursive = TRUE)
   }
@@ -607,11 +616,11 @@ for(i in c(5,6,7,8)){
     num_generalist = i,
     random_seed = 2025,  # Base seed (not used for iterations)
     balance_specialist_generalist = 1,
-    remove_habitats = c('hab_6', 'hab_8'),  # Set to TRUE to remove desert and rocky habitats
+    remove_habitats = removehab, 
     save_results = TRUE,
     modtype = 'glm',
     dft_folder = dft_folder,
-    resampling_approach='bootstrap',
+    resampling_approach=resampling_approach,
     n_cores = NULL  # Will use detectCores() - 3
   )
   
@@ -619,6 +628,6 @@ for(i in c(5,6,7,8)){
   
 }
 
-
+gc()
 
 
