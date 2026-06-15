@@ -12,7 +12,7 @@ run_analysis <- function(
   random_seed = 2025,
   # data filtering parameters
   balance_specialist_generalist = 1, # balance specialist vs non specialist by taxa
-  remove_habitats = FALSE, # c("hab_6", "hab_8") for removing desert (hab_6), rocky (hab_8)
+  remove_habitats = NULL, # c("hab_6", "hab_8") for removing desert (hab_6), rocky (hab_8)
   # output parameters
   output_suffix = paste0("_", format(Sys.Date(), "%m%d"), "_", format(Sys.Date(), "%Y")),
   save_results = TRUE,
@@ -78,7 +78,7 @@ run_analysis <- function(
   df_all_info <- df_all_info %>% select(-all_of(c('hab_14.1', 'hab_14.2', 'hab_14.3', 'hab_14.4', 'hab_14.5', 'hab_14.6')))
   
   # ======= 2.3 Remove some habitats if requested =======
-  if (remove_habitats!=FALSE) {
+  if (!is.null(remove_habitats)) {
     df_all_info <- df_all_info %>% select(-all_of(remove_habitats))
     # Update colname_dataset to exclude these habitats
     colname_dataset <- c("lc_code", "n_samples", habitat_info1$habitat_code[!habitat_info1$habitat_code %in% remove_habitats], "auc")
@@ -129,7 +129,8 @@ run_analysis <- function(
   clusterExport(cl, c("habitat_info1", "ideam_lc_info", "cgls_lc_info", 
                       "get_a_single_row", "create_balanced_splits", 
                       "create_splits_replace",
-                      "build_evaluate_model", "get_odds_ratios_row"))
+                      "build_evaluate_model", "get_odds_ratios_row",
+                      "resampling_approach"))
   
   # Load required packages and define functions on cluster
   clusterEvalQ(cl, {
@@ -228,6 +229,17 @@ run_analysis <- function(
     
     # Define getHabAssoc function on cluster
     getHabAssoc <- function(df, seed, landcover_dataset){
+      if (nrow(df) == 0) {
+        return(data.frame(
+          land_cover = character(0),
+          pos_odds_habitats = character(0),
+          seed_val = numeric(0),
+          dataset = character(0),
+          auc = numeric(0),
+          n_samples = numeric(0),
+          stringsAsFactors = FALSE
+        ))
+      }
       ## determine what is a good land cover - habitat pair to keep
       ## using the Lumbierres et al. thresholds
       habitat_associations <- data.frame(
@@ -309,20 +321,22 @@ run_analysis <- function(
           min = NA,`one-third` = NA,`two-third` = NA, max = NA, seed = seed
         )
         tmp <- data.frame(
-          land_cover = character(),
-          pos_odds_habitats = character(),
-          seed_val = seed,
-          dataset = 'ideam',
-          auc = numeric(),
-          n_samples = numeric()
+          land_cover = character(0),
+          pos_odds_habitats = character(0),
+          seed_val = numeric(0),
+          dataset = character(0),
+          auc = numeric(0),
+          n_samples = numeric(0),
+          stringsAsFactors = FALSE
         )
         
         # Create empty raw odds ratios dataframe
         raw_odds <- data.frame(
-          land_cover = character(),
-          habitat = character(),
-          odds_ratio = numeric(),
-          seed = numeric()
+          land_cover = character(0),
+          habitat = character(0),
+          odds_ratio = numeric(0),
+          seed = numeric(0),
+          stringsAsFactors = FALSE
         )
       } else {
         this_tert <- data.frame(
@@ -372,20 +386,22 @@ run_analysis <- function(
       )
       
       tmp <- data.frame(
-        land_cover = character(),
-        pos_odds_habitats = character(),
-        seed_val = seed,
-        dataset = 'ideam',
-        auc = numeric(),
-        n_samples = numeric()
+        land_cover = character(0),
+        pos_odds_habitats = character(0),
+        seed_val = numeric(0),
+        dataset = character(0),
+        auc = numeric(0),
+        n_samples = numeric(0),
+        stringsAsFactors = FALSE
       )
       
       # Create empty raw odds ratios dataframe
       raw_odds <- data.frame(
-        land_cover = character(),
-        habitat = character(),
-        odds_ratio = numeric(),
-        seed = numeric()
+        land_cover = character(0),
+        habitat = character(0),
+        odds_ratio = numeric(0),
+        seed = numeric(0),
+        stringsAsFactors = FALSE
       )
       
       return(list(tert = this_tert, hab_assoc = tmp, raw_odds = raw_odds))
@@ -439,7 +455,13 @@ run_analysis <- function(
     run_single_iteration(seed, df_all_info, df_basic_info, colname_dataset, balance_specialist_generalist, modtype)
   })
   
-  cat("doing good")
+  ### ---------------- debug codes ----------------
+#  iteration_results <- lapply(1:1000, function(seed) {
+#    run_single_iteration(seed, df_all_info, df_basic_info, colname_dataset, balance_specialist_generalist, modtype)
+#  })
+  ### --------------------- debug codes end -------------------  
+  
+  cat("Parallel iterations complete.\n")
   # Stop cluster
   stopCluster(cl)
   
@@ -453,7 +475,7 @@ run_analysis <- function(
     # Create filename with parameters
     filename_base <- paste0(dft_folder, "/btst_ideam_randomCI_", 
                             "gen", num_generalist, "_",
-                            ifelse(remove_habitats, "rmhab", ""),
+                            ifelse(!is.null(remove_habitats), "rmhab", ""),
                             ifelse(!balance_specialist_generalist, "_nobal", ""),
                             output_suffix)
     
@@ -500,7 +522,7 @@ run_analysis <- function(
 
 
 # ======================= Analyze & Visualize Results =========================
-save_results <- function(example_results){
+save_results <- function(example_result){
   if (!is.null(example_result$all_results)) {
     cat("\n=== Analyzing Results ===\n")
     
@@ -558,7 +580,7 @@ save_results <- function(example_results){
     
     # Create and save count heatmap
     count_heatmap <- create_count_heatmap(count_matrix, dft_folder)
-    ggsave(paste0(dft_folder, "/count_heatmap.png"), count_heatmap, width=10, height=8)
+    ggsave(paste0(dft_folder, "/viz/count_heatmap.png"), count_heatmap, width=12, height=8)
     
   } else {
     cat("\nNo results found to analyze. Make sure to run the analysis first.\n")
@@ -566,27 +588,37 @@ save_results <- function(example_results){
 }
 
 
-gc()
-
-
 # ================== Run =====================
-
-
-dft_folder <- "results/5gen_glm_pval_oob_2012_2022_bal_keepaa_spthi"
-if (!dir.exists(dft_folder)) {
-  dir.create(dft_folder, recursive = TRUE)
+overall_folder <- 'results/glm_btst_2012_rmhab'
+if (!dir.exists(overall_folder)) {
+  dir.create(overall_folder, recursive = TRUE)
 }
 
-# Example run with 1000 parallel iterations
-example_result <- run_analysis(
-  num_generalist = 5,
-  random_seed = 2025,  # Base seed (not used for iterations)
-  balance_specialist_generalist = 1,
-  remove_habitats = c('hab_6', 'hab_8'),  # Set to TRUE to remove desert and rocky habitats
-  save_results = TRUE,
-  modtype = 'glm',
-  dft_folder = dft_folder,
-  n_cores = NULL  # Will use detectCores() - 3
-)
+for(i in c(5,6,7,8)){
+  cat('Generalist spp has ', i, ' preferences\n')
+  # genN modtype resampling_approach year_spp_filter remove_habitat
+  dft_folder <- file.path(overall_folder, paste0('gen', i, '_glm_btst_2012_rmhab'))
+  if (!dir.exists(dft_folder)) {
+    dir.create(dft_folder, recursive = TRUE)
+  }
+  
+  # Example run with 1000 parallel iterations
+  example_result <- run_analysis(
+    num_generalist = i,
+    random_seed = 2025,  # Base seed (not used for iterations)
+    balance_specialist_generalist = 1,
+    remove_habitats = c('hab_6', 'hab_8'),  # Set to TRUE to remove desert and rocky habitats
+    save_results = TRUE,
+    modtype = 'glm',
+    dft_folder = dft_folder,
+    resampling_approach='bootstrap',
+    n_cores = NULL  # Will use detectCores() - 3
+  )
+  
+  save_results(example_result)
+  
+}
 
-save_results(example_results)
+
+
+
