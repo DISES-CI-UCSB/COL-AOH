@@ -310,7 +310,7 @@ getRanges <- function(folder_name){
 #writeRaster(col_srtm, 'data/col_srtm.tif')
 
 #col_srtm <- rast('data/topographic/col_srtm.tif')
-folder_ranges <- here('data/IUCN_range_maps')
+folder_ranges <- file.path('data/IUCN_range_maps')
 # if need to clean anything, use the above function
 
 # get species elevation info
