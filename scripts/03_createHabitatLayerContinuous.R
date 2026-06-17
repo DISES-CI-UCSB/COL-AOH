@@ -118,6 +118,8 @@ for(hab in habitat_cols){
   gc()
 }
 
+# NOTE: I then manually matched names of the layers with those in habitat_info1 so all would be consistent
+
 
 #test <- rast('data/hab_layers/2012_btst_7gen_keephab/Savanna_layer.tif')
 #plot(test)
