@@ -28,7 +28,6 @@ source('scripts/refineBiomodelos/info.R')
 
 # Authorization to Google Drive
 #drive_auth()
-cleanRangeMaps('REPTILES', folder_ranges, 0)
 
 cleanRangeMaps <- function(folder_name, folder_ranges, if_introduced){
   # -------------------------------------------------------
@@ -321,7 +320,9 @@ elev_info <- elev_info %>%
   mutate(elevation_upper = ifelse(is.na(elevation_upper), 9000, elevation_upper)) %>% unique()
 
 # get species preference info
-pts <- read.csv('data/occ_pts/allinfo_ideam_coords_2012_0605.csv') %>% rename(
+# NOTE: although we only used 2021~ records to compute the matrix
+# we can use all records to get species preference information
+pts <- read.csv('data/occ_pts/allinfo_ideam_coords_all_0605.csv') %>% rename(
   species = c(any_of(c('scntfcN', 'scientificName')))
 )
 cols <- colnames(pts)
@@ -338,7 +339,13 @@ pref_info <- pref_info %>% mutate(
 # remove the original ones
 pref_info <- pref_info %>% select(-all_of(c('hab_14.1', 'hab_14.2', 'hab_14.3', 'hab_14.4', 'hab_14.5', 'hab_14.6')))
 
-all_taxa <- c('Birds', 'Mammals', 'Amphibians', 'Reptiles')
+all_taxa <- c(
+  #'Birds', 
+  #''Mammals', 
+  'Amphibians', 
+  'Reptiles'
+  )
+
 for(t in all_taxa){
   print(t)
   if(file.exists('data/pref_needs_info_btstgen7keep.csv')){
