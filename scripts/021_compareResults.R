@@ -8,32 +8,49 @@ setwd('Users/wenxinyang/Desktop/GitHub/colander')
 source('scripts/refineBiomodelos/funcs.R')
 source('scripts/refineBiomodelos/info.R')
 
-folder_gen7 <- 'results/glm_btst_2012_keephab/gen7_glm_btst_2012_keephab/'
-cv_gen7 <- read.csv(file.path(folder_gen7, 'cv_table.csv'))
-se_gen7 <- read.csv(file.path(folder_gen7, 'se_table.csv'))
+nums <- c(5, 6, 7, 8)
+folders <- paste0('gen', nums, '_glm_btst_2012_keephab/')
+cvmats <- c()
+for(i in 1:length(folders)){
+  f <- folders[i]
+  folder <- file.path('results/glm_btst_2012_keephab', f)
+  cv_f <- read.csv(file.path(folder, 'cv_table.csv')) %>% filter(X!='Mine and Waste Dump')
+  cv_f_mat <- as.matrix(cv_f %>% select(-any_of("X")))
+  cvmats[[i]] <- cv_f_mat
+}
 
-folder_gen5 <- 'results/glm_btst_2012_keephab/gen8_glm_btst_2012_keephab/'
-cv_gen5 <- read.csv(file.path(folder_gen5, 'cv_table.csv'))
-se_gen5 <- read.csv(file.path(folder_gen5, 'se_table.csv'))
 
-## ------------ compare cv -------------------
-cv_gen7_1 <- as.matrix(cv_gen7 %>% select(-any_of("X")))
-cv_gen5_1 <- as.matrix(cv_gen5 %>% select(-any_of("X")))
+# ----------- get sum of cv for all ----------
+cv_sums <- sapply(cvmats, sum, na.rm = TRUE)
 
-both_finite <- is.finite(cv_gen7_1) & is.finite(cv_gen5_1)
-delta_cv <- matrix(0, nrow = nrow(cv_gen7_1), ncol = ncol(cv_gen7_1))
-delta_cv[both_finite] <- cv_gen7_1[both_finite] - cv_gen5_1[both_finite]
-cv_gen7_1[!both_finite] <- 0
-cv_gen5_1[!both_finite] <- 0
-sum(delta_cv)
+# ----------- get median of cv for all ---------
+cv_meds <- sapply(cvmats, median, na.rm=TRUE)
 
-## ------------ compare se -------------------
-se_gen7_1 <- as.matrix(se_gen7 %>% select(-any_of("X")))
-se_gen5_1 <- as.matrix(se_gen5 %>% select(-any_of("X")))
+# ----------- get ranks ---------------
+nrow <- nrow(cvmats[[1]])
+ncol <- ncol(cvmats[[1]])
+nmat <- length(cvmats)
+cvarray <- array(unlist(cvmats), dim = c(nrow, ncol, nmat))
+rank_array <- array(NA, dim = dims)
+dims <- dim(cvarray)
+# For each cell (i,j), rank across matrices
+for (i in 1:dims[1]) {
+  for (j in 1:dims[2]) {
+    # Get values at position (i,j) from all matrices
+    values <- cvarray[i, j, ]
+    # Rank them and store back
+    rank_array[i, j, ] <- rank(values, ties.method = "average")
+  }
+}
 
-both_finite <- is.finite(se_gen7_1) & is.finite(se_gen5_1)
-delta_se <- matrix(0, nrow = nrow(cv_gen7_1), ncol = ncol(se_gen7_1))
-delta_se[both_finite] <- se_gen7_1[both_finite] - se_gen5_1[both_finite]
-se_gen7_1[!both_finite] <- 0
-se_gen5_1[!both_finite] <- 0
-sum(delta_se)
+rank_mats <- lapply(1:dims[3], function(m) rank_array[, , m])
+
+cv_ranks <- sapply(rank_mats, sum, na.rm=TRUE)
+
+# ------------------ combine them into a single dataframe -------------------
+cv_info <- data.frame(
+  N_gen = nums,
+  cv_sums = cv_sums,
+  cv_meds = cv_meds,
+  cv_ranks = cv_ranks
+)

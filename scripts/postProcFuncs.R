@@ -36,11 +36,11 @@ create_count_matrix <- function(all_hab_data, land_covers, habitats) {
 }
 
 
-# Function to create 95% CI matrix (width)
-create_ci_matrix <- function(all_raw_odds, land_covers, habitats) {
-  ci_matrix <- matrix(NA, nrow = length(land_covers), ncol = length(habitats))
-  rownames(ci_matrix) <- land_covers
-  colnames(ci_matrix) <- habitats
+# Function to calculate stuff
+create_stability_metrics_tables <- function(all_raw_odds, land_covers, habitats, metricname) {
+  the_matrix <- matrix(NA, nrow = length(land_covers), ncol = length(habitats))
+  rownames(the_matrix) <- land_covers
+  colnames(the_matrix) <- habitats
   
   for (lc in land_covers) {
     for (hab in habitats) {
@@ -50,14 +50,24 @@ create_ci_matrix <- function(all_raw_odds, land_covers, habitats) {
       values <- values[!is.na(values)]
       
       if (length(values) > 0) {
-        # Calculate 95% confidence interval
-        ci <- quantile(values, c(0.025, 0.975))
-        ci_matrix[lc, hab] <- ci[2] - ci[1]  # CI width
+        if(metricname == "bootstrap_se"){
+          metricval <- sd(values)
+        }
+        if(metricname == "cv"){
+          metricval <- sd(values)/abs(mean(values))
+        }
+        if(metricname == "mean"){
+          metricval <- mean(values)
+        }
+        if(metricname == "median"){
+          metricval <- median(values)
+        }
+        the_matrix[lc, hab] <- metricval
       }
     }
   }
   
-  return(ci_matrix)
+  return(the_matrix)
 }
 
 
