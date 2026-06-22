@@ -149,7 +149,7 @@ for(sp_name in species_list) {
 
 
 
-AOHValidation <- function(threshold, out_csv){
+AOHValidation <- function(thresholds, out_csv){
   # process each taxon group separately to save memory
   for(taxa_group in names(species_by_taxa)) {
     message('Processing taxa group: ', taxa_group)
@@ -197,21 +197,6 @@ AOHValidation <- function(threshold, out_csv){
       
       message('Processing: ', sp_name)
       
-      # initialize result with NA values and empty error message
-      result_df <- data.frame(
-        threshold = threshold,
-        species = sp_name,
-        taxa = NA_character_,
-        range_area_km2 = NA_real_,
-        aoh_area_km2 = NA_real_,
-        model_prevalence = NA_real_,
-        points_in_range = NA_integer_,
-        points_in_aoh = NA_integer_,
-        point_prevalence = NA_real_,
-        error_message = "",
-        stringsAsFactors = FALSE
-      )
-      
       # Wrap entire processing in tryCatch for error handling
       tryCatch({
         aoh_path <- aoh_files[gsub(' ', '_', sp_name) == gsub('\\.(tif|tiff)$', '', basename(aoh_files))]
@@ -222,7 +207,6 @@ AOHValidation <- function(threshold, out_csv){
         
         sp_taxa <- unique(pts_sf[pts_sf$species == sp_name, ]$taxa)
         sp_taxa <- if(length(sp_taxa) > 0) sp_taxa[1] else NA_character_
-        result_df$taxa <- sp_taxa
         
         # get range polygons
         sp_range <- get_species_range(sp_name, sp_taxa, range_data)
@@ -237,73 +221,96 @@ AOHValidation <- function(threshold, out_csv){
           rng3116 <- sf::st_transform(sp_range_u, 3116)
           as.numeric(sum(sf::st_area(rng3116))) / 1e6
         }, error = function(e) NA_real_)
-        result_df$range_area_km2 <- range_area_km2
+        
         
         # read AOH raster and compute area (km^2)
         aoh <- tryCatch({ terra::rast(aoh_path) }, error = function(e) NULL)
         if (is.null(aoh)) {
           stop('Failed to read AOH for ', sp_name)
         }
-        # non-NA cells are considered AOH presence
-        # binarization step
-        aoh_mask <- terra::app(aoh, fun = function(x) 
-          ifelse(is.na(x), NA, ifelse(x>=threshold, 1, NA)))
         
-        # calculate aoh area
-        cell_area_km2 <- terra::cellSize(aoh_mask, unit = 'km')
-        aoh_area_km2 <- as.numeric(terra::global(terra::mask(cell_area_km2, aoh_mask), 'sum', na.rm = TRUE)[1,1])
-        result_df$aoh_area_km2 <- aoh_area_km2
-        
-        model_prev <- if(!is.na(range_area_km2) && range_area_km2 > 0) aoh_area_km2 / range_area_km2 else NA_real_
-        result_df$model_prevalence <- model_prev
-        
-        # point prevalence
-        pts_sp <- pts_sf[pts_sf$species == sp_name, ]
-        if (nrow(pts_sp) == 0) {
-          num_pts_range <- 0
-          num_pts_in_aoh <- 0
-          point_prev <- NA_real_
-        } else {
-          # points within range polygon
-          pts_in_range <- trySuppressWarnings(pts_sp[sf::st_within(pts_sp, sp_range_u, sparse = FALSE)[,1], ])
-          num_pts_range <- nrow(pts_in_range)
-          if (num_pts_range == 0) {
+        for(threshold in thresholds){
+          # initialize result with NA values and empty error message
+          result_df <- data.frame(
+            threshold = threshold,
+            species = sp_name,
+            taxa = NA_character_,
+            range_area_km2 = NA_real_,
+            aoh_area_km2 = NA_real_,
+            model_prevalence = NA_real_,
+            points_in_range = NA_integer_,
+            points_in_aoh = NA_integer_,
+            point_prevalence = NA_real_,
+            error_message = "",
+            stringsAsFactors = FALSE
+          )
+          
+          result_df$taxa <- sp_taxa
+          result_df$range_area_km2 <- range_area_km2
+          
+          # non-NA cells are considered AOH presence
+          # binarization step
+          aoh_mask <- terra::app(aoh, fun = function(x) 
+            ifelse(is.na(x), NA, ifelse(x>=threshold, 1, NA)))
+          
+          # calculate aoh area
+          cell_area_km2 <- terra::cellSize(aoh_mask, unit = 'km')
+          aoh_area_km2 <- as.numeric(terra::global(terra::mask(cell_area_km2, aoh_mask), 
+                                                   'sum', na.rm = TRUE)[1,1])
+          result_df$aoh_area_km2 <- aoh_area_km2
+          
+          model_prev <- if(!is.na(range_area_km2) && range_area_km2 > 0) aoh_area_km2 / range_area_km2 else NA_real_
+          result_df$model_prevalence <- model_prev
+          
+          
+          # point prevalence
+          pts_sp <- pts_sf[pts_sf$species == sp_name, ]
+          if (nrow(pts_sp) == 0) {
+            num_pts_range <- 0
             num_pts_in_aoh <- 0
             point_prev <- NA_real_
           } else {
-            # create 300m buffer around points and check for AOH intersection
-            # project points to a projected CRS for accurate buffering (using UTM zone 18N for Colombia)
-            pts_projected <- sf::st_transform(pts_in_range, 32618)  # UTM 18N
-            pts_buffered <- sf::st_buffer(pts_projected, dist = 300)  # 300m buffer
-            
-            # project buffered points back to AOH raster CRS
-            pts_buffered_aoh_crs <- sf::st_transform(pts_buffered, terra::crs(aoh))
-            pts_buffered_v <- terra::vect(pts_buffered_aoh_crs)
-            
-            # extract AOH values within buffered areas
-            vals <- tryCatch({ 
-              terra::extract(aoh, pts_buffered_v, fun = max, na.rm = TRUE)[,2] 
-            }, error = function(e) rep(NA, num_pts_range))
-            
-            # count points where buffered area intersects with AOH (any non-NA, non-zero value)
-            num_pts_in_aoh <- sum(!is.na(vals) & vals > 0)
-            point_prev <- num_pts_in_aoh / num_pts_range
+            # points within range polygon
+            pts_in_range <- trySuppressWarnings(pts_sp[sf::st_within(pts_sp, sp_range_u, sparse = FALSE)[,1], ])
+            num_pts_range <- nrow(pts_in_range)
+            if (num_pts_range == 0) {
+              num_pts_in_aoh <- 0
+              point_prev <- NA_real_
+            } else {
+              # create 300m buffer around points and check for AOH intersection
+              # project points to a projected CRS for accurate buffering (using UTM zone 18N for Colombia)
+              pts_projected <- sf::st_transform(pts_in_range, 32618)  # UTM 18N
+              pts_buffered <- sf::st_buffer(pts_projected, dist = 300)  # 300m buffer
+              
+              # project buffered points back to AOH raster CRS
+              pts_buffered_aoh_crs <- sf::st_transform(pts_buffered, terra::crs(aoh))
+              pts_buffered_v <- terra::vect(pts_buffered_aoh_crs)
+              
+              # extract AOH values within buffered areas
+              vals <- tryCatch({ 
+                terra::extract(aoh, pts_buffered_v, fun = max, na.rm = TRUE)[,2] 
+              }, error = function(e) rep(NA, num_pts_range))
+              
+              # count points where buffered area intersects with AOH (any non-NA, non-zero value)
+              num_pts_in_aoh <- sum(!is.na(vals) & vals > 0)
+              point_prev <- num_pts_in_aoh / num_pts_range
+            }
           }
+          
+          result_df$points_in_range <- num_pts_range
+          result_df$points_in_aoh <- num_pts_in_aoh
+          result_df$point_prevalence <- point_prev
+          
+          # Write result to CSV after each species
+          append_to_csv(result_df, out_csv)
+          gc()
         }
-        
-        result_df$points_in_range <- num_pts_range
-        result_df$points_in_aoh <- num_pts_in_aoh
-        result_df$point_prevalence <- point_prev
         
       }, error = function(e) {
         # Record error message
         result_df$error_message <<- as.character(e$message)
         message('Error processing ', sp_name, ': ', e$message)
       })
-      
-      # Write result to CSV after each species
-      append_to_csv(result_df, out_csv)
-      message('Saved result for ', sp_name, ' to CSV')
     }
     
     # clear range data from memory after processing each taxon
@@ -315,13 +322,10 @@ AOHValidation <- function(threshold, out_csv){
 
 li_thresholds <- seq(800, 1000, by=10)
 
-for(m in li_thresholds){
-  cat('start working on ', m, '\n')
-  tic()
-  AOHValidation(m, out_csv)
-  toc()
-  
-}
+
+tic()
+AOHValidation(li_thresholds, out_csv)
+toc()
 
 
 
