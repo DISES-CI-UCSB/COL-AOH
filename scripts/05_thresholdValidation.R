@@ -7,12 +7,15 @@
 # Model prevalence: AOH size / range size (km^2)
 # Point prevalence: (# points within AOH) / (# points within actual range)
 
-packages <- c("sf", "terra", "dplyr", "readr")
+packages <- c("sf", "terra", "dplyr", "readr", "tictoc")
 lapply(packages, library, character.only = TRUE)
 
 # keep consistent working directory style with other scripts
 setwd('/')
-setwd('Users/wenxinyang/Desktop/GitHub/colander')
+setwd('C:/Users/wenxinyang/Desktop/GitHub/colander')
+# setwd('Users/wenxinyang/Desktop/GitHub/colander')
+source('scripts/refineBiomodelos/funcs.R')
+source('scripts/refineBiomodelos/info.R')
 
 dir_aoh <- 'data/col_aoh/2012_7gen_btst_keephab/'
 dir_ranges <- 'data/IUCN_range_maps/cleaned_ranges'
@@ -102,8 +105,8 @@ trySuppressWarnings <- function(expr) {
 }
 
 # read occurrence points from CSV
-pts_df <- if (file.exists(pts_path_all)) read.csv(pts_path_all) else NULL
-if (is.null(pts_df)) stop('Occurrence points file not found: ', pts_path)
+pts_df <- if (file.exists(pts_path_temp)) read.csv(pts_path_temp) else NULL
+if (is.null(pts_df)) stop('Occurrence points file not found: ', pts_path_temp)
 if('scntfcN' %in% colnames(pts_df)) pts_df <- pts_df %>% rename(species = scntfcN)
 if('scientificName' %in% colnames(pts_df)) pts_df <- pts_df %>% rename(species = scientificName)
 # ensure standard column names
@@ -310,6 +313,15 @@ AOHValidation <- function(threshold, out_csv){
 }
 
 
+li_thresholds <- seq(800, 1000, by=10)
+
+for(m in li_thresholds){
+  cat('start working on ', m, '\n')
+  tic()
+  AOHValidation(m, out_csv)
+  toc()
+  
+}
 
 
 
