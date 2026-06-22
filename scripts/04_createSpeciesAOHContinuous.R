@@ -21,7 +21,8 @@ packages <- c("sf", "terra", "here", "rgrass", "dplyr", "data.table",
 lapply(packages, library, character.only = TRUE)
 
 setwd('/')
-setwd('Users/wenxinyang/Desktop/GitHub/colander')
+setwd('C:/Users/wenxinyang/Desktop/GitHub/colander')
+# setwd('Users/wenxinyang/Desktop/GitHub/colander')
 source('scripts/refineBiomodelos/funcs.R')
 source('scripts/refineBiomodelos/info.R')
 
@@ -340,8 +341,8 @@ pref_info <- pref_info %>% mutate(
 pref_info <- pref_info %>% select(-all_of(c('hab_14.1', 'hab_14.2', 'hab_14.3', 'hab_14.4', 'hab_14.5', 'hab_14.6')))
 
 all_taxa <- c(
-  #'Birds', 
-  #''Mammals', 
+  'Birds', 
+  'Mammals', 
   'Amphibians', 
   'Reptiles'
   )
@@ -392,8 +393,11 @@ for(t in all_taxa){
           worker_ranges <- getRanges(t)
           
           # Load spatial objects for this worker
-          col_bound <- vect('/Users/wenxinyang/Desktop/Dissertation/DATA/Colombia_bound/Colombia_bound.shp')
-          col_srtm <- rast('data/topographic/col_srtm.tif')
+         
+          # col_bound <- vect('/Users/wenxinyang/Desktop/Dissertation/DATA/Colombia_bound/Colombia_bound.shp')
+          col_bound <- vect("data/Colombia_bound/Colombia_bound.shp")
+          #col_srtm <- rast('data/topographic/col_srtm.tif')
+          col_srtm <- rast('data/col_srtm.tif')
           
           # Write progress: ranges loaded, starting createAOH
           write(paste(Sys.time(), spp, "RANGES_LOADED_STARTING_AOH", sep = " | "), 
@@ -459,7 +463,8 @@ for(t in all_taxa){
       
       # Source required files
       setwd('/')
-      setwd('Users/wenxinyang/Desktop/GitHub/colander')
+      setwd('C:/Users/wenxinyang/Desktop/GitHub/colander')
+      #setwd('Users/wenxinyang/Desktop/GitHub/colander')
       source('scripts/refineBiomodelos/funcs.R')
       source('scripts/refineBiomodelos/info.R')
       
