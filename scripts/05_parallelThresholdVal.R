@@ -22,7 +22,7 @@ dir_ranges <- 'data/IUCN_range_maps/cleaned_ranges'
 pts_path_all <- 'data/occ_pts/allinfo_ideam_coords_all_0605.csv'
 pts_path_temp <- 'data/occ_pts/allinfo_ideam_coords_2012_0605.csv'
 out_dir <- 'results/validation'
-out_csv <- file.path(out_dir, 'aoh_validation_0622.csv')
+out_csv <- file.path(out_dir, 'aoh_validation_0623.csv')
 
 if(!dir.exists(out_dir)) {
   dir.create(out_dir, recursive = TRUE)
@@ -432,7 +432,7 @@ li_thresholds <- seq(800, 1000, by = 50)
 # Run with parallel processing
 tic()
 message("Starting parallel processing...")
-results <- AOHValidationParallel(li_thresholds, out_csv, n_cores = 4)
+results <- AOHValidationParallel(li_thresholds, out_csv, n_cores = 8)
 toc()
 
 message('Validation complete. Results saved to: ', out_csv)
