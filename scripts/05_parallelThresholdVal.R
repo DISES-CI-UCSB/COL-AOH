@@ -2,12 +2,13 @@
 # based on validation
 # Author: Wenxin Yang
 # Date: September, 2025
-# Modified: June, 2026 (Added parallel processing)
+# Modified: June, 2026 (Added parallel processing + bug fixes)
 
 # Model prevalence: AOH size / range size (km^2)
 # Point prevalence: (# points within AOH) / (# points within actual range)
 
-packages <- c("sf", "terra", "dplyr", "readr", "tictoc", "foreach", "doParallel", "parallel")
+
+packages <- c("sf", "terra", "dplyr", "readr", "tictoc", "foreach", "doParallel", "parallel", "flock", "stringr")
 lapply(packages, library, character.only = TRUE)
 
 # keep consistent working directory style with other scripts
@@ -22,7 +23,7 @@ dir_ranges <- 'data/IUCN_range_maps/cleaned_ranges'
 pts_path_all <- 'data/occ_pts/allinfo_ideam_coords_all_0605.csv'
 pts_path_temp <- 'data/occ_pts/allinfo_ideam_coords_2012_0605.csv'
 out_dir <- 'results/validation'
-out_csv <- file.path(out_dir, 'aoh_validation_0623.csv')
+out_csv <- file.path(out_dir, 'aoh_validation_0626.csv')
 
 if(!dir.exists(out_dir)) {
   dir.create(out_dir, recursive = TRUE)
@@ -49,22 +50,76 @@ if (!file.exists(out_csv)) {
 # check if species already exists in CSV
 species_exists_in_csv <- function(species_name, csv_path) {
   if (!file.exists(csv_path)) return(FALSE)
+  # ===== *** CHANGES: Added flock lock for reading *** ========
+  lock_file <- paste0(csv_path, ".lock")
+  max_retries <- 10
+  for (i in 1:max_retries) {
+    if (!file.exists(lock_file)) {
+      file.create(lock_file)
+      on.exit(file.remove(lock_file))
+      existing_df <- readr::read_csv(csv_path, show_col_types = FALSE)
+      return(species_name %in% existing_df$species)
+    }
+    Sys.sleep(runif(1, 0.1, 0.5))
+  }
+  # If we can't get lock, just read without lock
   existing_df <- readr::read_csv(csv_path, show_col_types = FALSE)
   return(species_name %in% existing_df$species)
 }
 
-# append result to CSV
-append_to_csv <- function(result_df, csv_path) {
-  if (file.exists(csv_path)) {
-    existing_df <- readr::read_csv(csv_path, show_col_types = FALSE)
-    # Remove any existing entry for this species
-    existing_df <- existing_df[existing_df$species != result_df$species, ]
-    # Combine and write
-    combined_df <- rbind(existing_df, result_df)
-    readr::write_csv(combined_df, csv_path)
-  } else {
-    readr::write_csv(result_df, csv_path)
+# ===== *** CHANGES: Completely rewritten append_to_csv with proper locking *** ========
+# append result to CSV with flock locking
+append_to_csv <- function(result_df, csv_path, max_retries = 10) {
+  lock_file <- paste0(csv_path, ".lock")
+  
+  for (attempt in 1:max_retries) {
+    # Check if lock file exists, wait if it does
+    if (file.exists(lock_file)) {
+      Sys.sleep(runif(1, 0.1, 0.5))
+      next
+    }
+    
+    # Try to create lock file
+    tryCatch({
+      file.create(lock_file)
+      on.exit({
+        if (file.exists(lock_file)) file.remove(lock_file)
+      })
+      
+      # Now safe to read and write
+      if (file.exists(csv_path)) {
+        existing_df <- readr::read_csv(csv_path, show_col_types = FALSE)
+        # Remove any existing entry for this species
+        existing_df <- existing_df[existing_df$species != result_df$species, ]
+        # Combine and write
+        combined_df <- rbind(existing_df, result_df)
+        readr::write_csv(combined_df, csv_path)
+      } else {
+        readr::write_csv(result_df, csv_path)
+      }
+      
+      # Success
+      return(TRUE)
+      
+    }, error = function(e) {
+      # Clean up lock file if it exists
+      if (file.exists(lock_file)) file.remove(lock_file)
+      
+      if (attempt == max_retries) {
+        warning("Failed to write to CSV after ", max_retries, " attempts: ", e$message)
+        # Try writing to backup file
+        backup_path <- paste0(csv_path, ".backup_", format(Sys.time(), "%Y%m%d_%H%M%S"))
+        readr::write_csv(result_df, backup_path)
+        warning("Results saved to backup file: ", backup_path)
+        return(FALSE)
+      }
+      
+      Sys.sleep(runif(1, 0.2, 0.5) * attempt)  # Exponential backoff
+      return(FALSE)
+    })
   }
+  
+  return(FALSE)
 }
 
 # helper to safely read a vector layer if it exists
@@ -294,32 +349,17 @@ process_species <- function(sp_name, thresholds, range_data, out_csv, pts_sf, ao
       results_list[[as.character(threshold)]] <- result_df
     }
     
-    # Combine all thresholds and write to CSV
+    # Combine all thresholds and write to CSV using locked write
     combined_results <- do.call(rbind, results_list)
+  
+    write_success <- append_to_csv(combined_results, out_csv)
     
-    # Write with lock to prevent conflicts
-    if (file.exists(out_csv)) {
-      # Use file lock with retry
-      max_retries <- 5
-      for (i in 1:max_retries) {
-        tryCatch({
-          existing_df <- readr::read_csv(out_csv, show_col_types = FALSE)
-          existing_df <- existing_df[existing_df$species != sp_name, ]
-          combined_df <- rbind(existing_df, combined_results)
-          readr::write_csv(combined_df, out_csv)
-          break
-        }, error = function(e) {
-          if (i == max_retries) stop(e)
-          Sys.sleep(1)  # Wait before retry
-        })
-      }
-    } else {
-      readr::write_csv(combined_results, out_csv)
+    if (!write_success) {
+      warning("Failed to write results for species: ", sp_name, " to main CSV")
     }
     
-    # Clean up
-    rm(aoh, aoh_mask, cell_area_km2)
-    gc()
+    # Clean up large objects
+    rm(aoh, aoh_mask, cell_area_km2, combined_results)
     
     return(paste0("Success: ", sp_name))
     
@@ -347,6 +387,9 @@ process_species <- function(sp_name, thresholds, range_data, out_csv, pts_sf, ao
       append_to_csv(error_result, out_csv)
     }, error = function(e2) {
       message("Could not write error result: ", e2$message)
+      # Write to backup file
+      backup_path <- paste0(out_csv, ".error_backup")
+      readr::write_csv(error_result, backup_path, append = TRUE)
     })
     
     return(paste0("Failed: ", sp_name))
@@ -363,21 +406,25 @@ AOHValidationParallel <- function(thresholds, out_csv, n_cores = NULL) {
   message("Using ", n_cores, " cores for parallel processing")
   
   # Setup parallel backend
-  cl <- makeCluster(n_cores)
+  cl <- makeCluster(n_cores, type = "PSOCK")
   registerDoParallel(cl)
   
-  # Define thresholds as a variable in the global environment of each worker
-  # This is the key fix for the 'thresholds' not found error
-  clusterExport(cl, c("thresholds"), envir = environment())
-  
-  # Export all necessary variables to cluster
-  clusterExport(cl, c(
-    "pts_sf", "aoh_files", "out_csv", 
+  # List all objects needed by workers
+  objects_to_export <- c(
+    # Data objects
+    "pts_sf", "aoh_files", "out_csv", "thresholds", 
     "dir_ranges", "taxa_map", "species_by_taxa",
+    # Functions
     "species_exists_in_csv", "get_species_range", 
     "load_range_data", "append_to_csv", "process_species",
     "read_vector_if_exists", "trySuppressWarnings"
-  ))
+  )
+  
+  # Export to workers
+  clusterExport(cl, objects_to_export, envir = environment())
+  
+  # Check for any additional dependencies
+  clusterExport(cl, c("li_thresholds"), envir = environment())
   
   # Load packages on each worker
   clusterEvalQ(cl, {
@@ -385,12 +432,15 @@ AOHValidationParallel <- function(thresholds, out_csv, n_cores = NULL) {
     library(terra)
     library(dplyr)
     library(readr)
+    library(flock)
+    library(tictoc)
   })
   
   # Process each taxa group in parallel
   results <- tryCatch({
     foreach(taxa_group = names(species_by_taxa), 
-            .packages = c("sf", "terra", "dplyr", "readr"),
+            .packages = c("sf", "terra", "dplyr", "readr", "flock"),
+            .export = objects_to_export,  # Explicitly export
             .errorhandling = "pass") %dopar% {
               
               message("Processing taxa group: ", taxa_group)
@@ -427,7 +477,7 @@ AOHValidationParallel <- function(thresholds, out_csv, n_cores = NULL) {
 }
 
 # Define thresholds
-li_thresholds <- seq(800, 1000, by = 50)
+li_thresholds <- seq(500, 950, by = 50)
 
 # Run with parallel processing
 tic()
@@ -448,3 +498,10 @@ if (!is.null(results)) {
     }
   }
 }
+
+# Wait for any pending writes
+Sys.sleep(2)
+# Read results
+test <- read.csv(out_csv)
+message("Total rows in results: ", nrow(test))
+message("Unique species processed: ", length(unique(test$species)))
