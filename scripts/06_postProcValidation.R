@@ -35,20 +35,14 @@ rm(dfpref)
 df_basic_info <- addGeneralistInfo(df_pref, 7)
 # rm(df_pref)
 
-df500750 <- read.csv('results/validation/aoh_validation_0623.csv') 
-# %>% filter(!is.na(point_prevalence) & !is.na(model_prevalence))
-df8001000 <- read.csv('results/validation/aoh_validation_0622.csv') 
-# %>% filter(!is.na(point_prevalence) & !is.na(model_prevalence))
-setdiff(unique(df500750$species), unique(df8001000$species))
-setdiff(unique(df8001000$species), unique(df500750$species))
-df <- rbind(df500750, df8001000)
+df <- read.csv('results/validation/aoh_validation_0626.csv') 
+as.datam.frame(table(df$threshold))
+df <- df %>% filter(!is.na(point_prevalence) & !is.na(model_prevalence))
 df_spp <- df %>% select(species, taxa) %>% unique()
 
 table(df_spp$taxa) 
 #aves: 1086; mamiferos: 145; anfibios: 67; squamata: 55
 unique(df$threshold)
-
-#tmp <- df8001000 %>% filter(species %in% unique(dfprobli1$species))
 
 ## ---------------- 1. threshold vs. validation accuracy/count -----------------
 dfthrshval <- as.data.frame(matrix(data=NA, nrow=0, ncol=3))
@@ -89,19 +83,6 @@ genli1 <- df_basic_info %>% filter(name %in% li1)
 table(genli1$type)
 genli2 <- df_basic_info %>% filter(name %in% li2)
 table(genli2$type)
-
-length(li1) # 21
-prefli1 <- dfpref1 %>% filter(name %in% li1)
-table(prefli1$habcode)
-prefli1_reasonable <- prefli1 %>% filter(habcode %in% c('14.12', '15', '2', '4'))
-problemli1 <- setdiff(li1, unique(prefli1_reasonable$name))
-dfprobli1 <- df %>% filter(species %in% problemli1)
-
-
-length(li2) # 22
-prefli2 <- dfpref1 %>% filter(name %in% li2)
-table(prefli2$habcode)
-
 
 ### --------------- 1.2. threshold vs. points -------------------
 ggplot(df, aes(x=point_prevalence, y=model_prevalence, group=threshold))+
@@ -155,6 +136,10 @@ for(t in c('aves', 'mamiferos', 'anfibios', 'squamata', 'all')){
   }
 }
 
+ggplot(dfdaoh %>% filter(threshold!=1000), aes(x=threshold, y=rate))+
+  geom_point()+
+  facet_wrap(~taxa, scales="free")
+
 ## --------------------- 3. number of matched pairs ---------------------
 mat <- read.csv('results/glm_btst_2012_keephab/gen7_glm_btst_2012_keephab/count_above_1_matrix.csv')
 dfcountall <- as.data.frame(matrix(data=NA, nrow=0, ncol=2))
@@ -172,3 +157,95 @@ ggplot(dfcountall, aes(x=threshold, y=count))+
   geom_point()+
   geom_line()+
   geom_label(aes(label=count))
+
+
+## ----------------------- make final matrix figure ---------------------
+pos_data <- read.csv('results/glm_btst_2012_keephab/gen7_glm_btst_2012_keephab/btst_ideam_randomCI_gen7__0615_2026_pos.csv')
+good_col_names <- gsub('\\.', ' ', colnames(pos_data))
+good_col_names <- gsub("Wetlands  inland", "Wetland (inland)", good_col_names)
+colnames(pos_data) <- good_col_names
+  
+if("X" %in% colnames(pos_data)){
+  pos_data$X <- NULL
+  }
+  
+# Get habitat columns (exclude land_cover, auc, n_samples)
+habitat_cols <- colnames(pos_data)[!colnames(pos_data) %in% c("", "land_cover", "auc", "n_samples")]
+  
+# Convert to long format for plotting
+pos_long <- pos_data %>%
+  select(land_cover, all_of(habitat_cols)) %>%
+  tidyr::gather(habitat, count_value, -land_cover)
+  
+# Create color categories for habitat columns
+pos_long$color_category <- cut(pos_long$count_value, 
+                               breaks = c(-Inf, 850, Inf),
+                               labels = c("Not a pair (≤850)", "AOH (>850)"),
+                               include.lowest = TRUE)
+  
+# Add AUC and n_samples data
+auc_data <- data.frame(
+  land_cover = pos_data$land_cover,
+  habitat = "AUC",
+  count_value = pos_data$auc,
+  color_category = "AUC"
+)
+  
+n_samples_data <- data.frame(
+  land_cover = pos_data$land_cover,
+  habitat = "n_samples",
+  count_value = round(pos_data$n_samples),
+  color_category = "n_samples"
+)
+  
+# Combine all data
+plot_data <- rbind(pos_long, auc_data, n_samples_data)
+  
+# Reorder color categories for legend: Low at top, Not a pair at bottom
+plot_data$color_category <- factor(plot_data$color_category,
+                                     levels = c("AOH (>850)", "Not a pair (≤850)", "AUC", "n_samples"))
+  
+# Order land cover types alphabetically in descending order (Z to A)
+plot_data$land_cover <- factor(plot_data$land_cover, 
+                               levels = sort(unique(plot_data$land_cover), decreasing = TRUE))
+  
+# Set factor levels for habitat to include AUC and n_samples at the end
+habitat_levels <- c(habitat_cols, "AUC", "n_samples")
+plot_data$habitat <- factor(plot_data$habitat, levels = habitat_levels)
+  
+  # Create heatmap
+p <- ggplot2::ggplot(plot_data, aes(x = habitat, y = land_cover, fill = color_category)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = ifelse(color_category == "AUC", 
+                               sprintf("%.2f", count_value),
+                               ifelse(color_category == "n_samples",
+                                      as.character(count_value),
+                                      as.character(count_value)))), 
+            size = 5, fontface = "bold", color = "black", family = "Arial") +
+  scale_fill_manual(
+    values = c("Not a pair (≤850)" = "#f7f7f7", "AOH (>850)" = "#659c6a",
+               "AUC" = "white", "n_samples" = "white"),
+    name = "Certainty level (counts)"
+    ) +
+  scale_x_discrete(position = "bottom") +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Arial"),
+    axis.text.x = element_text(size = 12, family = "Arial", angle = 30, hjust = 1),
+    axis.text.y = element_text(size = 15, family = "Arial"),
+    axis.title.x = element_text(size = 16, face = 'bold', family = "Arial"),
+    axis.title.y = element_text(size = 16, face = 'bold', family = "Arial"),
+    legend.title = element_text(size = 16, family = "Arial"),
+    legend.text = element_text(size = 14, family = "Arial"),
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, size = 20, face = "bold", family = "Arial"),
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA)
+    ) +
+  labs(
+    # title = "Habitat-land cover translation matrix",
+    x = "Habitat Classes",
+    y = "Land Cover Classes"
+    ) +
+  coord_fixed(ratio = 0.6)
+p
