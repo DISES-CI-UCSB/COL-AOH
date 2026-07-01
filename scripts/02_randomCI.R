@@ -65,7 +65,7 @@ run_analysis <- function(
   rm(df_pref)
   
   # remove habitat codes not included in the analysis per the original paper
-  df_all_info <- df_all %>% select(-all_of(drop_cols))
+  df_all_info <- df_all %>% select(-all_of(drop_cols)) #1915 spp
   
   # remove those near boundary
   if('dst_t_b' %in% colnames(df_all_info)){
@@ -96,13 +96,13 @@ run_analysis <- function(
   # remove rows with NA values
   df_all_info <- df_all_info %>% select(-any_of(c('year', 'eventYr', 'finalYr','id')))
   # tmp <- df_all_info[!complete.cases(df_all_info),]
-  df_all_info <- df_all_info[complete.cases(df_all_info), ]
+  df_all_info <- df_all_info[complete.cases(df_all_info), ] # 1786
   sum(is.na(df_all_info))
   df_all_info$X <- NULL
   
   # sum all columns that start with "hab_"
   df_all_info$sum <- rowSums(df_all_info[,grep("^hab_", colnames(df_all_info))])
-  df_all_info <- df_all_info %>% filter(sum>0) %>% select(-sum)
+  df_all_info <- df_all_info %>% filter(sum>0) %>% select(-sum) # 1708
   if('scntfcN' %in% colnames(df_all_info)){
     df_all_info$species <- df_all_info$scntfcN
     df_all_info$scntfcN <- NULL

@@ -19,12 +19,28 @@ for(i in 1:length(folders)){
   cvmats[[i]] <- cv_f_mat
 }
 
+# use sum, mean, se
 
 # ----------- get sum of cv for all ----------
 cv_sums <- sapply(cvmats, sum, na.rm = TRUE)
 
 # ----------- get median of cv for all ---------
 cv_meds <- sapply(cvmats, median, na.rm=TRUE)
+
+# ----------- get mean of cv for all ---------
+cv_mean <- sapply(cvmats, mean, na.rm=TRUE)
+
+# ----------- get sd of cv for all ---------
+cv_sd <- sapply(cvmats, sd, na.rm=TRUE)
+
+# ----------- get sd of cv for all ---------
+se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+cv_se <- sapply(cvmats, se)
+# ----------- get min of cv for all ---------
+cv_min <- sapply(cvmats, min, na.rm=TRUE)
+
+# ----------- get max of cv for all ---------
+cv_max <- sapply(cvmats, max, na.rm=TRUE)
 
 # ----------- get ranks ---------------
 nrow <- nrow(cvmats[[1]])
@@ -51,6 +67,13 @@ cv_ranks <- sapply(rank_mats, sum, na.rm=TRUE)
 cv_info <- data.frame(
   N_gen = nums,
   cv_sums = cv_sums,
-  cv_meds = cv_meds,
+  cv_min = cv_min,
+  #cv_meds = cv_meds,
+  cv_mean = cv_mean,
+  cv_se = cv_se,
+  cv_max = cv_max,
+  cv_sd = cv_sd,
   cv_ranks = cv_ranks
 )
+
+

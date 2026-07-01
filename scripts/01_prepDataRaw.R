@@ -152,6 +152,9 @@ names_li <- unique(full_list_time$species)
 ## ---------------- temporal filtering ---------------------
 year_rec = 2012
 recent_list = full_list_time %>% filter(finalYear >= year_rec)
+nrow(full_list_time) - nrow(recent_list)
+nrow(recent_list)
+table(recent_list$taxa)
 #recent_list <- full_list
 recent_list$id <- 1:nrow(recent_list)
 ## ---------------- spatial thinning --------------------
@@ -169,6 +172,10 @@ recent_list_thinned <- recent_list %>%
   slice(1) %>%
   ungroup() %>%
   select(-cell_id)
+
+nrow(recent_list) - nrow(recent_list_thinned)
+nrow(recent_list_thinned)
+table(recent_list_thinned$taxa)
 
 names_before <- unique(recent_list$scientificName)
 names_thinned <- unique(recent_list_thinned$scientificName)
